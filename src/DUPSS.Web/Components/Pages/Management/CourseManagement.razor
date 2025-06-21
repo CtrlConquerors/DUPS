@@ -7,8 +7,8 @@
 @inject CourseTopicApiService CourseTopicApiService
 @inject RoleApiService RoleApiService
 @inject UserApiService UserApiService
-
 @inject IJSRuntime JS
+@inject IWebHostEnvironment WebHostEnvironment // Inject IWebHostEnvironment to get wwwroot path
 
 @* We can nest AuthorizeView but make sure to add Context to the innerAuthorizeView *@
 @*Example below*@
@@ -275,6 +275,29 @@
                 </select>
             </div>
 
+            @* Image Upload Section *@
+            <div class="mb-3">
+                <label class="form-label">Course Image</label>
+                <InputFile OnChange="HandleFileSelection" accept=".jpg,.jpeg,.png" />
+                @if (!string.IsNullOrEmpty(courseToEdit.ImageUrl))
+                {
+                    <div class="mt-2">
+                        <p>Current Image:</p>
+                        <img src="@courseToEdit.ImageUrl" alt="Current Course Image" class="img-thumbnail" style="max-width: 200px; max-height: 200px; border-radius: 8px;" />
+                    </div>
+                }
+                else if (selectedFile != null)
+                {
+                    <div class="mt-2">
+                        <p>File selected for upload: @selectedFile.Name</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="mt-2 text-muted">No image selected.</div>
+                }
+            </div>
+
             <div>
                 <button class="btn btn-success me-2" @onclick="SaveCourse">Save</button>
                 <button class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
@@ -319,6 +342,11 @@
     private bool isNewCourse = false;
     private bool showNewTopicInput = false; // Controls visibility of new topic input
     private string newTopicName = string.Empty; // Binds to the new topic input field
+    private IBrowserFile? selectedFile; // Holds the file selected by InputFile
+
+    // Define a maximum file size for uploads in this component (e.g., 5 MB)
+    // This value will be used directly when opening the file stream.
+    private const long MaxAllowedFileSize = 5 * 1024 * 1024; // 5 MB
 
     private List<CourseDTO> filteredCourses = new List<CourseDTO>();
 
@@ -518,6 +546,17 @@
         return $"TP{maxIdNum + 1:D4}";
     }
 
+    // Handles the file selection from the InputFile component
+    private void HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        validationMessage = string.Empty; // Clear validation message on new file selection
+        if (selectedFile != null)
+        {
+            Console.WriteLine($"File selected: {selectedFile.Name}, Size: {selectedFile.Size} bytes, ContentType: {selectedFile.ContentType}");
+        }
+    }
+
     private void AddCourse()
     {
         validationMessage = string.Empty;
@@ -531,10 +570,12 @@
             TopicId = "",
             StaffId = "",
             Description = "",
-            ConsultantId = ""
+            ConsultantId = "",
+            ImageUrl = null // Ensure ImageUrl is reset for new course
         };
         isNewCourse = true;
         showEditForm = true;
+        selectedFile = null; // Clear any previously selected file
     }
 
     private void EditCourse(string courseId)
@@ -556,10 +597,12 @@
                 ConsultantId = course.ConsultantId,
                 Topic = course.Topic,
                 Staff = course.Staff,
-                Consultant = course.Consultant
+                Consultant = course.Consultant,
+                ImageUrl = course.ImageUrl // Retain the existing ImageUrl for display
             };
             isNewCourse = false;
             showEditForm = true;
+            selectedFile = null; // Clear any previously selected file
         }
     }
 
@@ -635,6 +678,7 @@
 
     private async Task SaveCourse()
     {
+        // --- Client-side Validation ---
         if (string.IsNullOrWhiteSpace(courseToEdit.CourseName))
         {
             validationMessage = "Course Name cannot be empty.";
@@ -651,23 +695,6 @@
             if (existingTopic != null)
             {
                 validationMessage = $"Topic '{newTopicName}' already exists. Please select it from the dropdown or enter a different name.";
-                return;
-            }
-
-            try
-            {
-                var newTopicId = GenerateNextTopicId();
-                var newTopic = new CourseTopic { TopicId = newTopicId, TopicName = newTopicName };
-                await CourseTopicApiService.CreateAsync(newTopic);
-                courseToEdit.TopicId = newTopic.TopicId;
-                topics = await CourseTopicApiService.GetAllAsync();
-                showNewTopicInput = false;
-                newTopicName = string.Empty;
-            }
-            catch (Exception ex)
-            {
-                validationMessage = $"Error creating new topic: {ex.Message}";
-                Console.WriteLine($"Error creating new topic: {ex.Message}");
                 return;
             }
         }
@@ -697,11 +724,99 @@
             validationMessage = "Please select a Consultant.";
             return;
         }
+        // --- End Client-side Validation ---
 
-        validationMessage = string.Empty;
+        validationMessage = string.Empty; // Clear any previous validation messages if all checks pass
 
         try
         {
+            // --- Handle New Topic Creation if applicable ---
+            if (showNewTopicInput && !string.IsNullOrWhiteSpace(newTopicName))
+            {
+                var newTopicId = GenerateNextTopicId();
+                var newTopic = new CourseTopic { TopicId = newTopicId, TopicName = newTopicName };
+                await CourseTopicApiService.CreateAsync(newTopic);
+                courseToEdit.TopicId = newTopic.TopicId; // Assign the newly created topic's ID
+                topics = await CourseTopicApiService.GetAllAsync(); // Refresh topics list
+                showNewTopicInput = false;
+                newTopicName = string.Empty;
+            }
+
+            // --- Handle Image Upload ---
+            if (selectedFile != null)
+            {
+                Console.WriteLine($"Attempting to save image for Course ID: {courseToEdit.CourseId}");
+                Console.WriteLine($"Original file name: {selectedFile.Name}, Size: {selectedFile.Size} bytes, ContentType: {selectedFile.ContentType}");
+
+                var fileExtension = Path.GetExtension(selectedFile.Name).ToLowerInvariant();
+                // Basic validation for image file types
+                if (fileExtension != ".jpg" && fileExtension != ".jpeg" && fileExtension != ".png")
+                {
+                    validationMessage = "Only JPG, JPEG, or PNG images are allowed for Course Image.";
+                    Console.WriteLine($"Validation failed: Invalid file type '{fileExtension}'.");
+                    return; // Stop saving if file type is invalid
+                }
+
+                // Check file size against MaxAllowedFileSize constant
+                if (selectedFile.Size > MaxAllowedFileSize)
+                {
+                    validationMessage = $"File size exceeds the maximum allowed size of {MaxAllowedFileSize / (1024 * 1024)} MB.";
+                    Console.WriteLine($"Validation failed: File size ({selectedFile.Size} bytes) exceeds MaxAllowedFileSize ({MaxAllowedFileSize} bytes).");
+                    return; // Stop saving if file is too large
+                }
+
+                // Construct the new file name (CourseId.extension)
+                var newFileName = $"{courseToEdit.CourseId}{fileExtension}";
+                // Construct the full path to save in wwwroot/images
+                var imagePath = Path.Combine(WebHostEnvironment.WebRootPath, "images", newFileName);
+                Console.WriteLine($"Target path for saving: {imagePath}");
+
+                try
+                {
+                    // Save the file to the server's wwwroot/images folder using a buffered copy
+                    long bytesCopied = 0;
+                    const int bufferSize = 4096; // 4KB buffer
+                    byte[] buffer = new byte[bufferSize];
+                    int bytesRead;
+
+                    // OpenReadStream with MaxAllowedFileSize as parameter for security and to prevent large files
+                    using (var stream = selectedFile.OpenReadStream(MaxAllowedFileSize))
+                    using (FileStream fs = new(imagePath, FileMode.Create))
+                    {
+                        while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        {
+                            await fs.WriteAsync(buffer, 0, bytesRead);
+                            bytesCopied += bytesRead;
+                        }
+                    }
+                    Console.WriteLine($"File '{newFileName}' successfully saved. Bytes copied: {bytesCopied} of {selectedFile.Size}");
+
+                    if (bytesCopied != selectedFile.Size)
+                    {
+                        Console.WriteLine($"WARNING: Bytes copied ({bytesCopied}) does not match original file size ({selectedFile.Size}). Partial upload?");
+                        validationMessage = "Image upload may be incomplete. Please try again.";
+                        // While we log a warning, for now, we'll let it proceed. If this is a critical issue,
+                        // you might want to `return` here or throw an exception to prevent saving the course.
+                    }
+
+                    // Update the ImageUrl property of the DTO to the path accessible from the web
+                    courseToEdit.ImageUrl = $"images/{newFileName}";
+                    Console.WriteLine($"CourseDTO.ImageUrl set to: {courseToEdit.ImageUrl}");
+                }
+                catch (Exception fileEx)
+                {
+                    Console.WriteLine($"ERROR during file save for '{newFileName}': {fileEx.Message}");
+                    validationMessage = $"Error saving image: {fileEx.Message}. Please try again.";
+                    return; // Stop saving course if image upload failed
+                }
+            }
+            // If no new file is selected, the courseToEdit.ImageUrl should retain its existing value (if editing)
+            // or remain null/empty (if adding a new course without an image).
+            // No explicit action is needed here if selectedFile is null, as courseToEdit.ImageUrl
+            // would either have been loaded from existing data or remain its default value.
+
+
+            // --- Perform Create or Update API Call ---
             if (isNewCourse)
             {
                 await CourseApiService.CreateAsync(courseToEdit);
@@ -713,10 +828,12 @@
                 Console.WriteLine($"Course '{courseToEdit.CourseName}' updated.");
             }
 
-            courses = await CourseApiService.GetAllAsync();
-            FilterAndSortCourses();
-            showEditForm = false;
-            GoToPage(1);
+            // --- Refresh Data and Reset UI State ---
+            courses = await CourseApiService.GetAllAsync(); // Refresh the main courses list
+            FilterAndSortCourses(); // Re-apply filters and sorting to updated list
+            showEditForm = false; // Hide the edit form
+            GoToPage(1); // Go back to the first page
+            selectedFile = null; // Clear the selected file after successful save
         }
         catch (Exception ex)
         {
@@ -738,10 +855,12 @@
             TopicId = "",
             StaffId = "",
             Description = "",
-            ConsultantId = ""
+            ConsultantId = "",
+            ImageUrl = null // Reset ImageUrl on cancel
         };
         isNewCourse = false; // Ensure isNewCourse is reset on cancel
         showEditForm = false;
+        selectedFile = null; // Clear selected file on cancel
     }
 
     private async Task DeleteCourse(string courseId)

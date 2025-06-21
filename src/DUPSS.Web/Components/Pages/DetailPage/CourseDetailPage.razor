@@ -67,7 +67,7 @@
                 <div class="instructor-info">
                     <img src="@(coursePageData.Instructor?.ImageUrl ?? $"https://placehold.co/40x40/95a5a6/ffffff?text={(coursePageData.Instructor?.Username?.FirstOrDefault().ToString() ?? "C")}")"
                          alt="Consultant Avatar" class="instructor-avatar-small" />
-                    <span class="instructor-text">Consultant: <span class="instructor-name-link">@coursePageData.Instructor?.Username</span></span>
+                    <span class="instructor-text">Instructor: <span class="instructor-name-link">@coursePageData.Instructor?.Username</span></span>
                 </div>
 
                 @* Conditional button rendering: Enroll Now or Go to Course *@

@@ -15,6 +15,7 @@
 }
 
     /* Decorative blurred background shapes */
+   
     .course-detail-container::before,
     .course-detail-container::after {
         content: "";
@@ -227,7 +228,7 @@
 
     .instructor-name-link:hover {
         color: #0056b3;
-        text-decoration: underline;
+       
     }
 
 /* Enroll Button - Ultra Glassmorphism */
