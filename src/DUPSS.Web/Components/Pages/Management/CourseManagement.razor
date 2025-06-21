@@ -1,7 +1,6 @@
 ﻿@page "/Management/Course"
 @using DUPSS.API.Models.DTOs
 @using DUPSS.API.Models.Objects
-@using DUPSS.Web.Components.Layout
 @using DUPSS.Web.Components.Service
 @inject NavigationManager NavigationManager
 @inject CourseApiService CourseApiService
@@ -9,7 +8,7 @@
 @inject RoleApiService RoleApiService
 @inject UserApiService UserApiService
 @inject IJSRuntime JS
-@layout ManagementLayout
+@inject IWebHostEnvironment WebHostEnvironment // Inject IWebHostEnvironment to get wwwroot path
 
 @* We can nest AuthorizeView but make sure to add Context to the innerAuthorizeView *@
 @*Example below*@
@@ -276,6 +275,29 @@
                 </select>
             </div>
 
+            @* Image Upload Section *@
+            <div class="mb-3">
+                <label class="form-label">Course Image</label>
+                <InputFile OnChange="HandleFileSelection" accept=".jpg,.jpeg,.png" />
+                @if (!string.IsNullOrEmpty(courseToEdit.ImageUrl))
+                {
+                    <div class="mt-2">
+                        <p>Current Image:</p>
+                        <img src="@courseToEdit.ImageUrl" alt="Current Course Image" class="img-thumbnail" style="max-width: 200px; max-height: 200px; border-radius: 8px;" />
+                    </div>
+                }
+                else if (selectedFile != null)
+                {
+                    <div class="mt-2">
+                        <p>File selected for upload: @selectedFile.Name</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="mt-2 text-muted">No image selected.</div>
+                }
+            </div>
+
             <div>
                 <button class="btn btn-success me-2" @onclick="SaveCourse">Save</button>
                 <button class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
@@ -320,6 +342,11 @@
     private bool isNewCourse = false;
     private bool showNewTopicInput = false; // Controls visibility of new topic input
     private string newTopicName = string.Empty; // Binds to the new topic input field
+    private IBrowserFile? selectedFile; // Holds the file selected by InputFile
+
+    // Define a maximum file size for uploads in this component (e.g., 5 MB)
+    // This value will be used directly when opening the file stream.
+    private const long MaxAllowedFileSize = 5 * 1024 * 1024; // 5 MB
 
     private List<CourseDTO> filteredCourses = new List<CourseDTO>();
 
@@ -519,6 +546,17 @@
         return $"TP{maxIdNum + 1:D4}";
     }
 
+    // Handles the file selection from the InputFile component
+    private void HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        validationMessage = string.Empty; // Clear validation message on new file selection
+        if (selectedFile != null)
+        {
+            Console.WriteLine($"File selected: {selectedFile.Name}, Size: {selectedFile.Size} bytes, ContentType: {selectedFile.ContentType}");
+        }
+    }
+
     private void AddCourse()
     {
         validationMessage = string.Empty;
@@ -532,10 +570,12 @@
             TopicId = "",
             StaffId = "",
             Description = "",
-            ConsultantId = ""
+            ConsultantId = "",
+            ImageUrl = null // Ensure ImageUrl is reset for new course
         };
         isNewCourse = true;
         showEditForm = true;
+        selectedFile = null; // Clear any previously selected file
     }
 
     private void EditCourse(string courseId)
@@ -557,10 +597,12 @@
                 ConsultantId = course.ConsultantId,
                 Topic = course.Topic,
                 Staff = course.Staff,
-                Consultant = course.Consultant
+                Consultant = course.Consultant,
+                ImageUrl = course.ImageUrl // Retain the existing ImageUrl for display
             };
             isNewCourse = false;
             showEditForm = true;
+            selectedFile = null; // Clear any previously selected file
         }
     }
 
@@ -636,6 +678,7 @@
 
     private async Task SaveCourse()
     {
+        // --- Client-side Validation ---
         if (string.IsNullOrWhiteSpace(courseToEdit.CourseName))
         {
             validationMessage = "Course Name cannot be empty.";
@@ -652,23 +695,6 @@
             if (existingTopic != null)
             {
                 validationMessage = $"Topic '{newTopicName}' already exists. Please select it from the dropdown or enter a different name.";
-                return;
-            }
-
-            try
-            {
-                var newTopicId = GenerateNextTopicId();
-                var newTopic = new CourseTopic { TopicId = newTopicId, TopicName = newTopicName };
-                await CourseTopicApiService.CreateAsync(newTopic);
-                courseToEdit.TopicId = newTopic.TopicId;
-                topics = await CourseTopicApiService.GetAllAsync();
-                showNewTopicInput = false;
-                newTopicName = string.Empty;
-            }
-            catch (Exception ex)
-            {
-                validationMessage = $"Error creating new topic: {ex.Message}";
-                Console.WriteLine($"Error creating new topic: {ex.Message}");
                 return;
             }
         }
@@ -698,63 +724,199 @@
             validationMessage = "Please select a Consultant.";
             return;
         }
+        // --- End Client-side Validation ---
 
-        validationMessage = string.Empty;
+        validationMessage = string.Empty; // Clear any previous validation messages if all checks pass
 
         try
         {
+            // --- Handle New Topic Creation if applicable ---
+            if (showNewTopicInput && !string.IsNullOrWhiteSpace(newTopicName))
+            {
+                var newTopicId = GenerateNextTopicId();
+                var newTopic = new CourseTopic { TopicId = newTopicId, TopicName = newTopicName };
+                await CourseTopicApiService.CreateAsync(newTopic);
+                courseToEdit.TopicId = newTopic.TopicId; // Assign the newly created topic's ID
+                topics = await CourseTopicApiService.GetAllAsync(); // Refresh topics list
+                showNewTopicInput = false;
+                newTopicName = string.Empty;
+            }
+
+            // --- Handle Image Upload ---
+            if (selectedFile != null)
+            {
+                Console.WriteLine($"File selected: {selectedFile.Name}, Size: {selectedFile.Size} bytes, ContentType: {selectedFile.ContentType}");
+                Console.WriteLine($"Attempting to save image for Course ID: {courseToEdit.CourseId}");
+                Console.WriteLine($"Original file name: {selectedFile.Name}, Size: {selectedFile.Size} bytes, ContentType: {selectedFile.ContentType}");
+
+                var fileExtension = Path.GetExtension(selectedFile.Name).ToLowerInvariant();
+                // Basic validation for image file types
+                if (fileExtension != ".jpg" && fileExtension != ".jpeg" && fileExtension != ".png")
+                {
+                    validationMessage = "Only JPG, JPEG, or PNG images are allowed for Course Image.";
+                    Console.WriteLine($"Validation failed: Invalid file type '{fileExtension}'.");
+                    return; // Stop saving if file type is invalid
+                }
+
+                // Check file size against MaxAllowedFileSize constant
+                if (selectedFile.Size > MaxAllowedFileSize)
+                {
+                    validationMessage = $"File size exceeds the maximum allowed size of {MaxAllowedFileSize / (1024 * 1024)} MB.";
+                    Console.WriteLine($"Validation failed: File size ({selectedFile.Size} bytes) exceeds MaxAllowedFileSize ({MaxAllowedFileSize} bytes).");
+                    return; // Stop saving if file is too large
+                }
+
+                // Construct the new file name (CourseId.extension)
+                var newFileName = $"{courseToEdit.CourseId}{fileExtension}";
+                // Construct the full path to save in wwwroot/images
+                var imagePath = Path.Combine(WebHostEnvironment.WebRootPath, "images", newFileName);
+                Console.WriteLine($"Target path for saving: {imagePath}");
+
+                try
+                {
+                    long bytesCopied = 0;
+                    const int bufferSize = 4096; // 4KB buffer
+                    byte[] buffer = new byte[bufferSize];
+                    int bytesRead;
+
+                    // IMPORTANT DIAGNOSTIC: Log the stream length as provided by Blazor
+                    Console.WriteLine($"Stream Length (from OpenReadStream): {selectedFile.Size}");
+
+                    FileStream fs = null; // Declare fs outside the try-catch for broader scope in case of error during creation
+                    try
+                    {
+                        Console.WriteLine("Attempting to create FileStream for writing...");
+                        // Changed FileShare.None to FileShare.ReadWrite
+                        fs = new FileStream(imagePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+                        Console.WriteLine("FileStream created successfully.");
+                    }
+                    catch (UnauthorizedAccessException uaEx)
+                    {
+                        Console.Error.WriteLine($"ERROR: Unauthorized access when creating FileStream. Check folder permissions for '{imagePath}'. Error: {uaEx.Message}");
+                        validationMessage = $"Permission denied: Cannot write to '{Path.GetFileName(imagePath)}'. Please check folder permissions (Modify/Full Control) for the 'images' folder.";
+                        return; // Exit immediately
+                    }
+                    catch (IOException ioEx)
+                    {
+                        Console.Error.WriteLine($"ERROR: IO Error when creating FileStream. Error: {ioEx.Message}");
+                        validationMessage = $"A file system error occurred when preparing to save the image: {ioEx.Message}. Check if the file is locked or disk space.";
+                        return; // Exit immediately
+                    }
+                    catch (Exception createFsEx)
+                    {
+                        Console.Error.WriteLine($"ERROR: General error creating FileStream: {createFsEx.Message}");
+                        validationMessage = $"An unexpected error occurred when preparing to save the image: {createFsEx.Message}";
+                        return; // Exit immediately
+                    }
+
+
+                    using (fs) // Use the FileStream instance here
+                    {
+                        Console.WriteLine("Attempting to read from input stream and write to FileStream...");
+                        using (var stream = selectedFile.OpenReadStream(MaxAllowedFileSize))
+                        {
+                            while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                            {
+                                // NEW DIAGNOSTIC: Log bytesRead inside the loop
+                                Console.WriteLine($"Read result from stream: {bytesRead} bytes.");
+                                await fs.WriteAsync(buffer, 0, bytesRead);
+                                bytesCopied += bytesRead;
+                                // IMPORTANT DIAGNOSTIC: Log bytes read in each iteration
+                                Console.WriteLine($"Bytes written in iteration: {bytesRead}, Total bytes copied so far: {bytesCopied}");
+                            }
+                            // Explicitly flush to ensure all buffered data is written to disk
+                            await fs.FlushAsync();
+                            Console.WriteLine("Finished writing to FileStream. Flushing data.");
+                        } // stream is disposed here
+                        Console.WriteLine("Input stream disposed.");
+                    } // fs is disposed here
+                    Console.WriteLine("FileStream disposed.");
+
+
+                    // IMPORTANT: Verify that the number of bytes copied matches the expected stream length.
+                    // If there was an issue during the transfer or write, bytesCopied might be less than stream.Length.
+                    if (bytesCopied != selectedFile.Size) // Use selectedFile.Size as stream.Length might not be available after stream is disposed
+                    {
+                        Console.WriteLine($"WARNING: Bytes copied ({bytesCopied}) does not match original file size ({selectedFile.Size}). File might be incomplete/corrupted.");
+                        validationMessage = "File was partially saved. Please try uploading again.";
+                        // Optionally, delete the incomplete file
+                        if (File.Exists(imagePath))
+                        {
+                            File.Delete(imagePath);
+                            Console.WriteLine($"Deleted incomplete file: {imagePath}");
+                        }
+                        return; // Stop further processing if file is corrupted
+                    }
+
+
+                    Console.WriteLine($"Image saved successfully to {imagePath}. Total bytes copied: {bytesCopied}");
+                    courseToEdit.ImageUrl = $"/images/{newFileName}"; // Update the DTO with the new image URL
+                    selectedFile = null; // Clear selected file after successful upload
+                }
+                catch (Exception finalEx) // General catch for any errors during read/write/validation after FileStream creation
+                {
+                    Console.Error.WriteLine($"ERROR: Unexpected error during image save process: {finalEx.Message}");
+                    Console.Error.WriteLine($"Stack Trace: {finalEx.StackTrace}");
+                    validationMessage = $"An unexpected error occurred during image saving: {finalEx.Message}";
+                    // Attempt to delete potentially corrupted file
+                    if (File.Exists(imagePath))
+                    {
+                        File.Delete(imagePath);
+                        Console.WriteLine($"Deleted problematic file due to general error: {imagePath}");
+                    }
+                    return;
+                }
+            }
+
+
+            // --- Perform Create or Update ---
+            CourseDTO? savedCourse;
             if (isNewCourse)
             {
-                await CourseApiService.CreateAsync(courseToEdit);
-                Console.WriteLine($"Course '{courseToEdit.CourseName}' created with ID: {courseToEdit.CourseId}");
+                savedCourse = await CourseApiService.CreateAsync(courseToEdit);
             }
             else
             {
-                await CourseApiService.UpdateAsync(courseToEdit);
-                Console.WriteLine($"Course '{courseToEdit.CourseName}' updated.");
+                savedCourse = await CourseApiService.UpdateAsync(courseToEdit);
             }
 
-            courses = await CourseApiService.GetAllAsync();
-            FilterAndSortCourses();
-            showEditForm = false;
-            GoToPage(1);
+            if (savedCourse != null)
+            {
+                Console.WriteLine("Course saved successfully, refreshing data.");
+                // Refresh all data
+                courses = await CourseApiService.GetAllAsync();
+                FilterAndSortCourses();
+                CancelEdit(); // Close the form
+            }
+            else
+            {
+                Console.WriteLine("Course save failed (API returned null).");
+                validationMessage = "Failed to save course. Please try again.";
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error saving course: {ex.Message}");
-            validationMessage = $"Error saving course: {ex.Message}";
+            Console.Error.WriteLine($"ERROR: Error during course save operation (outer catch): {ex.Message}");
+            Console.Error.WriteLine($"Stack Trace: {ex.StackTrace}");
+            validationMessage = $"An unexpected critical error occurred: {ex.Message}";
+            // In case of any error, ensure the selected file is cleared
+            selectedFile = null;
         }
     }
 
     private void CancelEdit()
     {
+        showEditForm = false;
+        isNewCourse = false;
         validationMessage = string.Empty;
+        selectedFile = null; // Clear selected file when canceling
         showNewTopicInput = false;
         newTopicName = string.Empty;
-        courseToEdit = new CourseDTO
-        {
-            CourseId = "",
-            CourseName = "",
-            CourseType = "Online",
-            TopicId = "",
-            StaffId = "",
-            Description = "",
-            ConsultantId = ""
-        };
-        isNewCourse = false; // Ensure isNewCourse is reset on cancel
-        showEditForm = false;
     }
 
     private async Task DeleteCourse(string courseId)
     {
-        var courseToDelete = courses?.FirstOrDefault(c => c.CourseId == courseId);
-        if (courseToDelete == null)
-        {
-            Console.WriteLine($"Course with ID {courseId} not found for deletion.");
-            return;
-        }
-
-        var confirmed = await JS.InvokeAsync<bool>("confirm", $"Are you sure you want to delete course '{courseToDelete.CourseName}' (ID: {courseToDelete.CourseId})?");
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"Are you sure you want to delete course with ID: {courseId}?");
         if (confirmed)
         {
             try
@@ -762,19 +924,21 @@
                 var success = await CourseApiService.DeleteAsync(courseId);
                 if (success)
                 {
-                    Console.WriteLine($"Course '{courseToDelete.CourseName}' (ID: {courseId}) deleted successfully.");
-                    // Refresh data after successful deletion
+                    Console.WriteLine($"Course with ID {courseId} deleted successfully.");
+                    // Refresh the list of courses
                     courses = await CourseApiService.GetAllAsync();
-                    FilterAndSortCourses();
+                    FilterAndSortCourses(); // Re-apply filters and sort after deletion
                 }
                 else
                 {
-                    Console.WriteLine($"Failed to delete course '{courseToDelete.CourseName}'.");
+                    Console.WriteLine($"Failed to delete course with ID {courseId}.");
+                    validationMessage = $"Failed to delete course with ID {courseId}. Course might not exist or an error occurred.";
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error deleting course: {ex.Message}");
+                validationMessage = $"Error deleting course: {ex.Message}";
             }
         }
     }

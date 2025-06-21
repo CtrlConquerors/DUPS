@@ -2,7 +2,9 @@ using DUPSS.Web.Components;
 using DUPSS.Web.Components.Service;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
+// Removed: using Microsoft.AspNetCore.Components.Forms; // This using directive is no longer needed here
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
@@ -14,6 +16,13 @@ builder.Services.AddRazorComponents()
     {
         options.DetailedErrors = true;
     });
+
+// Removed: Configure InputFile options here. Max file size will now be handled in the component.
+// builder.Services.Configure<InputFileOptions>(options =>
+// {
+//     options.MaxAllowedSize = 5 * 1024 * 1024; // Allows files up to 5 MB. Adjust this value as needed.
+// });
+
 
 builder.Services.AddAuthentication(options =>
 {
