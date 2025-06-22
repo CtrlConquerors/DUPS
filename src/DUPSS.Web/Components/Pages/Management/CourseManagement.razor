@@ -774,72 +774,34 @@
 
                 try
                 {
+                    // Use CopyToAsync for more robust stream copying
                     long bytesCopied = 0;
-                    const int bufferSize = 4096; // 4KB buffer
-                    byte[] buffer = new byte[bufferSize];
-                    int bytesRead;
+                    // Removed TimeSpan.FromSeconds(60) argument
+                    using (var inputStream = selectedFile.OpenReadStream(MaxAllowedFileSize, CancellationToken.None))
+                    {
+                        Console.WriteLine($"Input stream opened from browser. Length: {inputStream.Length}");
+                        Console.WriteLine($"Input Stream Position before CopyToAsync: {inputStream.Position}"); // Log position
 
-                    // IMPORTANT DIAGNOSTIC: Log the stream length as provided by Blazor
-                    Console.WriteLine($"Stream Length (from OpenReadStream): {selectedFile.Size}");
-
-                    FileStream fs = null; // Declare fs outside the try-catch for broader scope in case of error during creation
-                    try
-                    {
-                        Console.WriteLine("Attempting to create FileStream for writing...");
-                        // Changed FileShare.None to FileShare.ReadWrite
-                        fs = new FileStream(imagePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
-                        Console.WriteLine("FileStream created successfully.");
-                    }
-                    catch (UnauthorizedAccessException uaEx)
-                    {
-                        Console.Error.WriteLine($"ERROR: Unauthorized access when creating FileStream. Check folder permissions for '{imagePath}'. Error: {uaEx.Message}");
-                        validationMessage = $"Permission denied: Cannot write to '{Path.GetFileName(imagePath)}'. Please check folder permissions (Modify/Full Control) for the 'images' folder.";
-                        return; // Exit immediately
-                    }
-                    catch (IOException ioEx)
-                    {
-                        Console.Error.WriteLine($"ERROR: IO Error when creating FileStream. Error: {ioEx.Message}");
-                        validationMessage = $"A file system error occurred when preparing to save the image: {ioEx.Message}. Check if the file is locked or disk space.";
-                        return; // Exit immediately
-                    }
-                    catch (Exception createFsEx)
-                    {
-                        Console.Error.WriteLine($"ERROR: General error creating FileStream: {createFsEx.Message}");
-                        validationMessage = $"An unexpected error occurred when preparing to save the image: {createFsEx.Message}";
-                        return; // Exit immediately
-                    }
-
-
-                    using (fs) // Use the FileStream instance here
-                    {
-                        Console.WriteLine("Attempting to read from input stream and write to FileStream...");
-                        using (var stream = selectedFile.OpenReadStream(MaxAllowedFileSize))
+                        using (FileStream outputStream = new FileStream(imagePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
                         {
-                            while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                            {
-                                // NEW DIAGNOSTIC: Log bytesRead inside the loop
-                                Console.WriteLine($"Read result from stream: {bytesRead} bytes.");
-                                await fs.WriteAsync(buffer, 0, bytesRead);
-                                bytesCopied += bytesRead;
-                                // IMPORTANT DIAGNOSTIC: Log bytes read in each iteration
-                                Console.WriteLine($"Bytes written in iteration: {bytesRead}, Total bytes copied so far: {bytesCopied}");
-                            }
-                            // Explicitly flush to ensure all buffered data is written to disk
-                            await fs.FlushAsync();
-                            Console.WriteLine("Finished writing to FileStream. Flushing data.");
-                        } // stream is disposed here
-                        Console.WriteLine("Input stream disposed.");
-                    } // fs is disposed here
-                    Console.WriteLine("FileStream disposed.");
+                            Console.WriteLine("Output FileStream created successfully.");
+                            Console.WriteLine("Attempting to copy data from input stream to output file stream...");
+                            await inputStream.CopyToAsync(outputStream);
+                            Console.WriteLine("Finished CopyToAsync. Flushing output stream.");
+                            await outputStream.FlushAsync(); // Ensure data is written to disk
+                            bytesCopied = outputStream.Length; // Get actual bytes written from the output stream
+                        }
+                        Console.WriteLine("Output FileStream disposed.");
+                    }
+                    Console.WriteLine("Input stream disposed.");
 
 
-                    // IMPORTANT: Verify that the number of bytes copied matches the expected stream length.
-                    // If there was an issue during the transfer or write, bytesCopied might be less than stream.Length.
-                    if (bytesCopied != selectedFile.Size) // Use selectedFile.Size as stream.Length might not be available after stream is disposed
+                    // IMPORTANT: Verify that the number of bytes copied matches the expected file size.
+                    // Compare bytesCopied with selectedFile.Size (original size from browser)
+                    if (bytesCopied != selectedFile.Size)
                     {
                         Console.WriteLine($"WARNING: Bytes copied ({bytesCopied}) does not match original file size ({selectedFile.Size}). File might be incomplete/corrupted.");
                         validationMessage = "File was partially saved. Please try uploading again.";
-                        // Optionally, delete the incomplete file
                         if (File.Exists(imagePath))
                         {
                             File.Delete(imagePath);
@@ -853,7 +815,23 @@
                     courseToEdit.ImageUrl = $"/images/{newFileName}"; // Update the DTO with the new image URL
                     selectedFile = null; // Clear selected file after successful upload
                 }
-                catch (Exception finalEx) // General catch for any errors during read/write/validation after FileStream creation
+                catch (UnauthorizedAccessException uaEx)
+                {
+                    Console.Error.WriteLine($"ERROR: Unauthorized access when creating/writing FileStream. Check folder permissions for '{imagePath}'. Error: {uaEx.Message}");
+                    validationMessage = $"Permission denied: Cannot write to '{Path.GetFileName(imagePath)}'. Please check folder permissions (Modify/Full Control) for the 'images' folder.";
+                    // Attempt to delete potentially corrupted file
+                    if (File.Exists(imagePath)) { File.Delete(imagePath); }
+                    return; // Exit immediately
+                }
+                catch (IOException ioEx)
+                {
+                    Console.Error.WriteLine($"ERROR: IO Error during file operation. Error: {ioEx.Message}");
+                    validationMessage = $"A file system error occurred: {ioEx.Message}. Check if the file is locked or disk space.";
+                    // Attempt to delete potentially corrupted file
+                    if (File.Exists(imagePath)) { File.Delete(imagePath); }
+                    return; // Exit immediately
+                }
+                catch (Exception finalEx) // General catch for any errors during read/write/validation
                 {
                     Console.Error.WriteLine($"ERROR: Unexpected error during image save process: {finalEx.Message}");
                     Console.Error.WriteLine($"Stack Trace: {finalEx.StackTrace}");
