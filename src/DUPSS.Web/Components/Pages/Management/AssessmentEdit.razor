@@ -295,7 +295,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Select Language</label>
-                        <InputSelect class="form-select" @bind-Value="selectedLanguageId" @onchange="LoadQuestions">
+                        <InputSelect class="form-select" @bind-Value="selectedLanguageId" @onchange="OnLanguageChanged">
                             <option value="0">Select a language...</option>
                             @foreach (var language in languages.OrderBy(l => l.LanguageName))
                             {
@@ -386,7 +386,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Select Language</label>
-                        <InputSelect class="form-select" @bind-Value="selectedLanguageId" @onchange="LoadResponses">
+                        <InputSelect class="form-select" @bind-Value="selectedLanguageId" @onchange="OnLanguageChanged">
                             <option value="0">Select a language...</option>
                             @foreach (var language in languages.OrderBy(l => l.LanguageName))
                             {
@@ -752,10 +752,40 @@
     private async Task OnVersionChanged(ChangeEventArgs e)
     {
         selectedVersionId = int.Parse(e.Value?.ToString() ?? "0");
+    
+        // Always load languages when version changes
         await LoadLanguages();
+    
+        // Reset language selection and dependent data
         selectedLanguageId = 0;
         questions = new();
         responses = new();
+    
+        StateHasChanged();
+    }
+    
+    private async Task OnLanguageChanged(ChangeEventArgs e)
+    {
+        selectedLanguageId = int.Parse(e.Value?.ToString() ?? "0");
+    
+        // Load questions and responses when language changes
+        if (selectedLanguageId > 0)
+        {
+            if (activeTab == "questions")
+            {
+                await LoadQuestions();
+            }
+            else if (activeTab == "responses")
+            {
+                await LoadResponses();
+            }
+        }
+        else
+        {
+            questions = new();
+            responses = new();
+        }
+    
         StateHasChanged();
     }
 
@@ -778,9 +808,8 @@
         }
     }
 
-    private async Task LoadQuestions(ChangeEventArgs e)
+    private async Task LoadQuestions()
     {
-        selectedLanguageId = int.Parse(e.Value?.ToString() ?? "0");
         if (selectedLanguageId > 0)
         {
             try
@@ -796,17 +825,16 @@
         {
             questions = new();
         }
-        StateHasChanged();
     }
 
-    private async Task LoadResponses(ChangeEventArgs e)
+    private async Task LoadResponses()
     {
-        selectedLanguageId = int.Parse(e.Value?.ToString() ?? "0");
         if (selectedLanguageId > 0)
         {
             try
             {
                 responses = await AssessmentApiService.GetResponsesAsync(selectedLanguageId);
+                // Also load questions for response details
                 questions = await AssessmentApiService.GetQuestionsForLanguageAsync(selectedLanguageId);
             }
             catch (Exception ex)
@@ -819,7 +847,6 @@
             responses = new();
             questions = new();
         }
-        StateHasChanged();
     }
 
     private async Task UpdateAssessment()
@@ -998,7 +1025,7 @@
             {
                 await AssessmentApiService.CreateQuestionAsync(questionDTO);
             }
-            await LoadQuestions(new ChangeEventArgs { Value = selectedLanguageId.ToString() });
+            await LoadQuestions();
             HideQuestionModal();
         }
         catch (Exception ex)
@@ -1137,7 +1164,7 @@
         try
         {
             await AssessmentApiService.DeleteQuestionAsync(id);
-            await LoadQuestions(new ChangeEventArgs { Value = selectedLanguageId.ToString() });
+            await LoadQuestions();
         }
         catch (Exception ex)
         {
@@ -1150,7 +1177,7 @@
         try
         {
             await AssessmentApiService.DeleteResponseAsync(id);
-            await LoadResponses(new ChangeEventArgs { Value = selectedLanguageId.ToString() });
+            await LoadResponses();
         }
         catch (Exception ex)
         {
@@ -1167,21 +1194,43 @@
     {
         Navigation.NavigateTo($"/Management/Assessment/{Id}", forceLoad: true);
     }
-
-    private void SetActiveTab(string tab)
+    
+    private async Task SetActiveTab(string tab)
     {
-        switch (tab)
-        {
-            
-        }
         activeTab = tab;
-        if (tab != "questions" && tab != "responses")
+    
+        // Load data when switching to specific tabs
+        if (tab == "languages" && selectedVersionId > 0)
         {
+            await LoadLanguages();
+        }
+        else if (tab == "questions" && selectedVersionId > 0)
+        {
+            await LoadLanguages();
+            if (selectedLanguageId > 0)
+            {
+                await LoadQuestions();
+            }
+        }
+        else if (tab == "responses" && selectedVersionId > 0)
+        {
+            await LoadLanguages();
+            if (selectedLanguageId > 0)
+            {
+                await LoadResponses();
+            }
+        }
+        else if (tab != "languages" && tab != "questions" && tab != "responses")
+        {
+            // Reset only when switching to other tabs
             selectedVersionId = 0;
             selectedLanguageId = 0;
             questions = new();
             responses = new();
+            languages = new();
         }
+    
+        StateHasChanged();
     }
 
     private string GetRiskLevelClass(string? riskLevel)
