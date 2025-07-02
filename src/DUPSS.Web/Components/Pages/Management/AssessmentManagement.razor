@@ -1,144 +1,134 @@
-﻿@* Assessment Management Main Page *@
-@page "/Management/Assessment"
-@using DUPSS.Web.Components.Service
+﻿@page "/Management/Assessment"
 @using DUPSS.API.Models.DTOs
-@inject NavigationManager NavigationManager
-@inject AssessmentApiService AssessmentApiService
-@inject IJSRuntime JSRuntime
+@using DUPSS.Web.Components.Layout
+@using DUPSS.Web.Components.Service
 
-<div class="assessment-management-container">
-    <h1>Assessment Management</h1>
-    
-    <div class="management-actions">
-        <button @onclick="ShowCreateAssessmentForm">Create New Assessment</button>
-        <button @onclick="RefreshAssessments">Refresh List</button>
+@inject AssessmentApiService AssessmentService
+@inject NavigationManager Navigation
+@layout ManagementLayout
+
+<PageTitle>Assessment Management</PageTitle>
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Assessment Management</h2>
+        <button class="btn btn-primary" @onclick="ShowCreateModal">
+            <i class="fas fa-plus"></i> Create New Assessment
+        </button>
     </div>
 
     @if (isLoading)
     {
-        <div class="loading">
-            <p>Loading assessments...</p>
-        </div>
-    }
-    else if (hasError)
-    {
-        <div class="error">
-            <p>Error loading assessments: @errorMessage</p>
-            <button @onclick="RefreshAssessments">Retry</button>
+        <div class="d-flex justify-content-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
         </div>
     }
     else
     {
-        @if (showCreateForm)
-        {
-            <div class="create-form">
-                <h3>Create New Assessment</h3>
-                <form @onsubmit="CreateAssessment" @onsubmit:preventDefault="true">
-                    <div class="form-group">
-                        <label for="assessmentType">Assessment Type:</label>
-                        <input id="assessmentType" @bind="newAssessment.AssessmentType" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="version">Version:</label>
-                        <input id="version" @bind="newAssessment.Version" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="language">Language:</label>
-                        <input id="language" @bind="newAssessment.Language" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="description">Description:</label>
-                        <textarea id="description" @bind="newAssessment.Description"></textarea>
-                    </div>
-                    <div class="form-actions">
-                        <button type="submit">Create Assessment</button>
-                        <button type="button" @onclick="CancelCreate">Cancel</button>
-                    </div>
-                </form>
-            </div>
-        }
-
-        <div class="assessments-list">
-            <h3>Existing Assessments</h3>
-            @if (assessments != null && assessments.Any())
+        <div class="row">
+            @foreach (var assessment in assessments)
             {
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Type</th>
-                            <th>Version</th>
-                            <th>Language</th>
-                            <th>Description</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var assessment in assessments)
-                        {
-                            <tr>
-                                <td>@assessment.AssessmentId</td>
-                                <td>@assessment.AssessmentType</td>
-                                <td>@assessment.Version</td>
-                                <td>@assessment.Language</td>
-                                <td>@(assessment.Description ?? "No description")</td>
-                                <td>
-                                    <button @onclick="() => EditAssessment(assessment)">Edit</button>
-                                    <button @onclick="() => ManageQuestions(assessment.AssessmentId)">Manage Questions</button>
-                                    <button @onclick="() => DeleteAssessment(assessment.AssessmentId)" 
-                                            @onclick:preventDefault="true">Delete</button>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            }
-            else
-            {
-                <p>No assessments found.</p>
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">@assessment.Name</h5>
+                            <span class="badge @(assessment.IsActive ? "bg-success" : "bg-secondary")">
+                                @(assessment.IsActive ? "Active" : "Inactive")
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <p class="card-text">@(string.IsNullOrEmpty(assessment.Description) ? "No description provided" : assessment.Description)</p>
+                            <p class="text-muted small">
+                                <strong>Type:</strong> @assessment.Type<br>
+                                <strong>Created:</strong> @assessment.CreatedAt.ToString("MMM dd, yyyy")
+                            </p>
+                        </div>
+                        <div class="card-footer">
+                            <div class="btn-group w-100" role="group">
+                                <button class="btn btn-outline-primary" @onclick="() => ViewAssessment(assessment.Id)">
+                                    <i class="fas fa-eye"></i> View
+                                </button>
+                                <button class="btn btn-outline-secondary" @onclick="() => EditAssessment(assessment.Id)">
+                                    <i class="fas fa-edit"></i> Edit
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             }
         </div>
 
-        @if (showEditForm && editingAssessment != null)
+        @if (!assessments.Any())
         {
-            <div class="edit-form">
-                <h3>Edit Assessment</h3>
-                <form @onsubmit="UpdateAssessment" @onsubmit:preventDefault="true">
-                    <div class="form-group">
-                        <label for="editAssessmentType">Assessment Type:</label>
-                        <input id="editAssessmentType" @bind="editingAssessment.AssessmentType" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="editVersion">Version:</label>
-                        <input id="editVersion" @bind="editingAssessment.Version" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="editLanguage">Language:</label>
-                        <input id="editLanguage" @bind="editingAssessment.Language" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="editDescription">Description:</label>
-                        <textarea id="editDescription" @bind="editingAssessment.Description"></textarea>
-                    </div>
-                    <div class="form-actions">
-                        <button type="submit">Update Assessment</button>
-                        <button type="button" @onclick="CancelEdit">Cancel</button>
-                    </div>
-                </form>
+            <div class="text-center py-5">
+                <i class="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No Assessments Found</h4>
+                <p class="text-muted">Create your first assessment to get started.</p>
+                <button class="btn btn-primary" @onclick="ShowCreateModal">
+                    <i class="fas fa-plus"></i> Create Assessment
+                </button>
             </div>
         }
     }
 </div>
 
+@* Create Assessment Modal *@
+<div class="modal fade @(showCreateModal ? "show d-block" : "")" tabindex="-1" style="@(showCreateModal ? "background-color: rgba(0,0,0,0.5);" : "")">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New Assessment</h5>
+                <button type="button" class="btn-close" @onclick="HideCreateModal"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="createAssessmentDTO" OnValidSubmit="CreateAssessment">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Name *</label>
+                        <InputText class="form-control" @bind-Value="createAssessmentDTO.Name" />
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <InputTextArea class="form-control" rows="3" @bind-Value="createAssessmentDTO.Description" />
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Type *</label>
+                        <InputSelect class="form-select" @bind-Value="createAssessmentDTO.Type">
+                            <option value="">Select type...</option>
+                            <option value="ASSIST">ASSIST</option>
+                            <option value="CRAFFT">CRAFFT</option>
+                            <option value="Custom">Custom</option>
+                        </InputSelect>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="HideCreateModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isCreating">
+                            @if (isCreating)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            Create Assessment
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
 @code {
-    private List<AssessmentDTO>? assessments;
+    private List<AssessmentDTO> assessments = new();
     private bool isLoading = true;
-    private bool hasError = false;
-    private string errorMessage = "";
-    private bool showCreateForm = false;
-    private bool showEditForm = false;
-    private AssessmentDTO newAssessment = new() { AssessmentId = "", AssessmentType = "", Version = "1.0", Language = "eng" };
-    private AssessmentDTO? editingAssessment = null;
+    private bool showCreateModal = false;
+    private bool isCreating = false;
+    private AssessmentDTO createAssessmentDTO = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -147,132 +137,72 @@
 
     private async Task LoadAssessments()
     {
+        isLoading = true;
         try
         {
-            isLoading = true;
-            hasError = false;
-            assessments = await AssessmentApiService.GetAllAsync();
+            assessments = await AssessmentService.GetAssessmentsAsync();
         }
         catch (Exception ex)
         {
-            hasError = true;
-            errorMessage = ex.Message;
+            Console.WriteLine($"Error loading assessments: {ex.Message}");
         }
         finally
         {
             isLoading = false;
-            StateHasChanged();
         }
     }
 
-    private void ShowCreateAssessmentForm()
+    private void ShowCreateModal()
     {
-        showCreateForm = true;
-        showEditForm = false;
-        newAssessment = new() { AssessmentId = "", AssessmentType = "", Version = "1.0", Language = "eng" };
+        createAssessmentDTO = new AssessmentDTO();
+        showCreateModal = true;
+    }
+
+    private void HideCreateModal()
+    {
+        showCreateModal = false;
     }
 
     private async Task CreateAssessment()
     {
+        isCreating = true;
         try
         {
-            var assessment = new AssessmentDTO()
-            {
-                AssessmentId = newAssessment.AssessmentType + "-" + newAssessment.Language + "-" + newAssessment.Version,
-                AssessmentType = newAssessment.AssessmentType,
-                Version = newAssessment.Version,
-                Language = newAssessment.Language,
-                Description = newAssessment.Description
-            };
-
-            await AssessmentApiService.CreateAsync(assessment);
+            await AssessmentService.CreateAssessmentAsync(createAssessmentDTO);
             await LoadAssessments();
-            showCreateForm = false;
-            await JSRuntime.InvokeVoidAsync("alert", "Assessment created successfully!");
+            HideCreateModal();
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error creating assessment: {ex.Message}");
+            Console.WriteLine($"Error creating assessment: {ex.Message}");
+        }
+        finally
+        {
+            isCreating = false;
         }
     }
 
-    private void EditAssessment(AssessmentDTO assessment)
-    {
-        editingAssessment = new AssessmentDTO
-        {
-            AssessmentId = assessment.AssessmentId,
-            AssessmentType = assessment.AssessmentType,
-            Version = assessment.Version,
-            Language = assessment.Language,
-            Description = assessment.Description
-        };
-        showEditForm = true;
-        showCreateForm = false;
-    }
-
-    private async Task UpdateAssessment()
+    private void ViewAssessment(int id)
     {
         try
         {
-            if (editingAssessment != null)
-            {
-                var assessment = new AssessmentDTO
-                {
-                    AssessmentId = editingAssessment.AssessmentId,
-                    AssessmentType = editingAssessment.AssessmentType,
-                    Version = editingAssessment.Version,
-                    Language = editingAssessment.Language,
-                    Description = editingAssessment.Description
-                };
-
-                await AssessmentApiService.UpdateAsync(assessment);
-                await LoadAssessments();
-                showEditForm = false;
-                editingAssessment = null;
-                await JSRuntime.InvokeVoidAsync("alert", "Assessment updated successfully!");
-            }
+            Navigation.NavigateTo($"/Management/Assessment/{id}", forceLoad: true);
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error updating assessment: {ex.Message}");
+            Console.WriteLine($"Navigation error: {ex.Message}");
         }
     }
 
-    private async Task DeleteAssessment(string assessmentId)
+    private void EditAssessment(int id)
     {
-        if (await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete assessment {assessmentId}?"))
+        try
         {
-            try
-            {
-                await AssessmentApiService.DeleteAsync(assessmentId);
-                await LoadAssessments();
-                await JSRuntime.InvokeVoidAsync("alert", "Assessment deleted successfully!");
-            }
-            catch (Exception ex)
-            {
-                await JSRuntime.InvokeVoidAsync("alert", $"Error deleting assessment: {ex.Message}");
-            }
+            Navigation.NavigateTo($"/Management/Assessment/{id}/edit", forceLoad: true);
         }
-    }
-
-    private void ManageQuestions(string assessmentId)
-    {
-        NavigationManager.NavigateTo($"/Management/Assessment/{assessmentId}/Questions/", forceLoad: true);
-    }
-
-    private async Task RefreshAssessments()
-    {
-        await LoadAssessments();
-    }
-
-    private void CancelCreate()
-    {
-        showCreateForm = false;
-    }
-
-    private void CancelEdit()
-    {
-        showEditForm = false;
-        editingAssessment = null;
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Navigation error: {ex.Message}");
+        }
     }
 }

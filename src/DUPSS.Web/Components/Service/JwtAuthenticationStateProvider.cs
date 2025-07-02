@@ -36,6 +36,13 @@ namespace DUPSS.Web.Components.Service
                         SetLogoutTimer(_accessToken);
                     }
                 }
+                catch (System.Security.Cryptography.CryptographicException)
+                {
+                    // Token is invalid or corrupted, clear it
+                    _accessToken = null;
+                    await _localStorage.DeleteAsync(AccessTokenKey);
+                    return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
+                }
                 catch (InvalidOperationException ex)
                 {
                     // JS interop not available (likely during prerendering)

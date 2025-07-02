@@ -1,0 +1,1197 @@
+﻿@page "/Management/Assessment/{Id:int}/edit"
+@using DUPSS.API.Models.DTOs
+@using DUPSS.Web.Components.Layout
+@using DUPSS.Web.Components.Service
+@inject AssessmentApiService AssessmentApiService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@layout ManagementLayout
+
+<PageTitle>Edit Assessment</PageTitle>
+
+<div class="container-fluid py-4">
+    @if (isLoading)
+    {
+        <div class="d-flex justify-content-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (assessment == null)
+    {
+        <div class="alert alert-danger">
+            <h4>Assessment Not Found</h4>
+            <p>The requested assessment could not be found.</p>
+            <button class="btn btn-primary" @onclick="NavigateBack">
+                <i class="fas fa-arrow-left"></i> Back to Assessments
+            </button>
+        </div>
+    }
+    else
+    {
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/Management/Assessment">Assessments</a></li>
+                <li class="breadcrumb-item active">Edit: @assessment.Name</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Edit Assessment: @assessment.Name</h2>
+            <div>
+                <button class="btn btn-outline-secondary me-2" @onclick="NavigateBack">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button class="btn btn-outline-primary me-2" @onclick="NavigateToView">
+                    <i class="fas fa-eye"></i> View
+                </button>
+            </div>
+        </div>
+
+        <ul class="nav nav-tabs mb-4">
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "basic" ? "active" : "")" @onclick='() => SetActiveTab("basic")'>Basic Information</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "versions" ? "active" : "")" @onclick='() => SetActiveTab("versions")'>Versions</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "languages" ? "active" : "")" @onclick='() => SetActiveTab("languages")'>Languages</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "questions" ? "active" : "")" @onclick='() => SetActiveTab("questions")'>Questions</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "responses" ? "active" : "")" @onclick='() => SetActiveTab("responses")'>Responses</button>
+            </li>
+        </ul>
+
+        @if (activeTab == "basic")
+        {
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5><i class="fas fa-edit"></i> Basic Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <EditForm Model="editAssessmentDTO" OnValidSubmit="UpdateAssessment">
+                                <DataAnnotationsValidator />
+                                <ValidationSummary class="alert alert-danger" />
+
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Name *</label>
+                                            <InputText class="form-control" @bind-Value="editAssessmentDTO.Name" />
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Type *</label>
+                                            <InputSelect class="form-select" @bind-Value="editAssessmentDTO.Type">
+                                                <option value="">Select type...</option>
+                                                <option value="ASSIST">ASSIST</option>
+                                                <option value="CRAFFT">CRAFFT</option>
+                                                <option value="Custom">Custom</option>
+                                            </InputSelect>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Description</label>
+                                    <InputTextArea class="form-control" rows="3" @bind-Value="editAssessmentDTO.Description" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <InputCheckbox class="form-check-input" @bind-Value="editAssessmentDTO.IsActive" />
+                                        <label class="form-check-label">Active</label>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                                        @if (isSaving)
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-2"></span>
+                                        }
+                                        <i class="fas fa-save"></i> Save Changes
+                                    </button>
+                                </div>
+                            </EditForm>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5><i class="fas fa-info-circle"></i> Assessment Info</h5>
+                        </div>
+                        <div class="card-body">
+                            <dl>
+                                <dt>Created:</dt>
+                                <dd>@assessment.CreatedAt.ToString("MMMM dd, yyyy")</dd>
+                                <dt>Current Status:</dt>
+                                <dd>
+                                    <span class="badge @(assessment.IsActive ? "bg-success" : "bg-secondary")">
+                                        @(assessment.IsActive ? "Active" : "Inactive")
+                                    </span>
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-exclamation-triangle"></i> Danger Zone</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small">
+                                Permanent actions that cannot be undone.
+                            </p>
+                            <button class="btn btn-outline-danger w-100" @onclick="ConfirmDeleteAssessment">
+                                <i class="fas fa-trash"></i> Delete Assessment
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (activeTab == "versions")
+        {
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-code-branch"></i> Versions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-end mb-3">
+                        <button class="btn btn-success" @onclick="ShowCreateVersionModal">
+                            <i class="fas fa-plus"></i> Add Version
+                        </button>
+                    </div>
+                    @if (versions.Any())
+                    {
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Version</th>
+                                    <th>Created At</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var version in versions.OrderBy(v => v.CreatedAt))
+                                {
+                                    <tr>
+                                        <td>@version.Version</td>
+                                        <td>@version.CreatedAt.ToString("MMM dd, yyyy")</td>
+                                        <td>
+                                            <span class="badge @(version.IsActive ? "bg-success" : "bg-secondary")">
+                                                @(version.IsActive ? "Active" : "Inactive")
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => ShowEditVersionModal(version)">
+                                                <i class="fas fa-edit"></i> Edit
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDeleteVersion(version.Id)">
+                                                <i class="fas fa-trash"></i> Delete
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No versions configured for this assessment.</p>
+                    }
+                </div>
+            </div>
+        }
+        else if (activeTab == "languages")
+        {
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-language"></i> Languages</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Version</label>
+                        <InputSelect class="form-select" @bind-Value="selectedVersionId" @onchange="OnVersionChanged">
+                            <option value="0">Select a version...</option>
+                            @foreach (var version in versions.OrderBy(v => v.Version))
+                            {
+                                <option value="@version.Id">@version.Version</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    @if (selectedVersionId > 0)
+                    {
+                        <div class="d-flex justify-content-end mb-3">
+                            <button class="btn btn-success" @onclick="ShowCreateLanguageModal">
+                                <i class="fas fa-plus"></i> Add Language
+                            </button>
+                        </div>
+                        @if (languages.Any())
+                        {
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Language</th>
+                                        <th>Code</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var language in languages.OrderBy(l => l.LanguageName))
+                                    {
+                                        <tr>
+                                            <td>@language.LanguageName</td>
+                                            <td>@language.LanguageCode</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => ShowEditLanguageModal(language)">
+                                                    <i class="fas fa-edit"></i> Edit
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDeleteLanguage(language.Id)">
+                                                    <i class="fas fa-trash"></i> Delete
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p class="text-muted">No languages configured for this version.</p>
+                        }
+                    }
+                </div>
+            </div>
+        }
+        else if (activeTab == "questions")
+        {
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-question-circle"></i> Questions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Version</label>
+                        <InputSelect class="form-select" @bind-Value="selectedVersionId" @onchange="OnVersionChanged">
+                            <option value="0">Select a version...</option>
+                            @foreach (var version in versions.OrderBy(v => v.Version))
+                            {
+                                <option value="@version.Id">@version.Version</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Select Language</label>
+                        <InputSelect class="form-select" @bind-Value="selectedLanguageId" @onchange="LoadQuestions">
+                            <option value="0">Select a language...</option>
+                            @foreach (var language in languages.OrderBy(l => l.LanguageName))
+                            {
+                                <option value="@language.Id">@language.LanguageName (@language.LanguageCode)</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    @if (selectedLanguageId > 0)
+                    {
+                        <div class="d-flex justify-content-end mb-3">
+                            <button class="btn btn-success" @onclick="ShowCreateQuestionModal">
+                                <i class="fas fa-plus"></i> Add Question
+                            </button>
+                        </div>
+                        @if (questions.Any())
+                        {
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Order</th>
+                                        <th>Text</th>
+                                        <th>Type</th>
+                                        <th>Required</th>
+                                        <th>Options</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var question in questions.OrderBy(q => q.OrderIndex))
+                                    {
+                                        <tr>
+                                            <td>@question.OrderIndex</td>
+                                            <td>@(question.Text.Length > 50 ? question.Text.Substring(0, 50) + "..." : question.Text)</td>
+                                            <td>@question.Type</td>
+                                            <td>@(question.IsRequired ? "Yes" : "No")</td>
+                                            <td>
+                                                @if (question.Options.Any())
+                                                {
+                                                    <ul class="mb-0">
+                                                        @foreach (var option in question.Options.OrderBy(o => o.OrderIndex))
+                                                        {
+                                                            <li>@option.Text (Value: @option.Value)</li>
+                                                        }
+                                                    </ul>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">No options</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => ShowEditQuestionModal(question)">
+                                                    <i class="fas fa-edit"></i> Edit
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDeleteQuestion(question.Id)">
+                                                    <i class="fas fa-trash"></i> Delete
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p class="text-muted">No questions configured for this language.</p>
+                        }
+                    }
+                </div>
+            </div>
+        }
+        else if (activeTab == "responses")
+        {
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-list-alt"></i> Responses</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Version</label>
+                        <InputSelect class="form-select" @bind-Value="selectedVersionId" @onchange="OnVersionChanged">
+                            <option value="0">Select a version...</option>
+                            @foreach (var version in versions.OrderBy(v => v.Version))
+                            {
+                                <option value="@version.Id">@version.Version</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Select Language</label>
+                        <InputSelect class="form-select" @bind-Value="selectedLanguageId" @onchange="LoadResponses">
+                            <option value="0">Select a language...</option>
+                            @foreach (var language in languages.OrderBy(l => l.LanguageName))
+                            {
+                                <option value="@language.Id">@language.LanguageName (@language.LanguageCode)</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    @if (selectedLanguageId > 0)
+                    {
+                        @if (responses.Any())
+                        {
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Respondent ID</th>
+                                        <th>Started At</th>
+                                        <th>Completed At</th>
+                                        <th>Total Score</th>
+                                        <th>Risk Level</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var response in responses)
+                                    {
+                                        <tr>
+                                            <td>@response.RespondentId</td>
+                                            <td>@response.StartedAt.ToString("MMM dd, yyyy HH:mm")</td>
+                                            <td>@(response.CompletedAt?.ToString("MMM dd, yyyy HH:mm") ?? "Not Completed")</td>
+                                            <td>@response.TotalScore</td>
+                                            <td>
+                                                <span class="badge @GetRiskLevelClass(response.RiskLevel)">
+                                                    @response.RiskLevel
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => ShowResponseDetails(response.LanguageId)">
+                                                    <i class="fas fa-eye"></i> View
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDeleteResponse(response.LanguageId)">
+                                                    <i class="fas fa-trash"></i> Delete
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p class="text-muted">No responses submitted for this language.</p>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@* Create/Edit Version Modal *@
+<div class="modal fade @(showVersionModal ? "show d-block" : "")" tabindex="-1"
+     style="@(showVersionModal ? "background-color: rgba(0,0,0,0.5);" : "")">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">@(isEditingVersion ? "Edit Version" : "Create Version")</h5>
+                <button type="button" class="btn-close" @onclick="HideVersionModal"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="versionDTO" OnValidSubmit="SaveVersion">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary class="alert alert-danger" />
+                    <div class="mb-3">
+                        <label class="form-label">Version *</label>
+                        <InputText class="form-control" @bind-Value="versionDTO.Version" />
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <InputCheckbox class="form-check-input" @bind-Value="versionDTO.IsActive" />
+                            <label class="form-check-label">Active</label>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <button type="button" class="btn btn-secondary me-2" @onclick="HideVersionModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            @(isEditingVersion ? "Update" : "Create")
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Create/Edit Language Modal *@
+<div class="modal fade @(showLanguageModal ? "show d-block" : "")" tabindex="-1"
+     style="@(showLanguageModal ? "background-color: rgba(0,0,0,0.5);" : "")">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">@(isEditingLanguage ? "Edit Language" : "Create Language")</h5>
+                <button type="button" class="btn-close" @onclick="HideLanguageModal"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="languageDTO" OnValidSubmit="SaveLanguage">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary class="alert alert-danger" />
+                    <div class="mb-3">
+                        <label class="form-label">Language Name *</label>
+                        <InputText class="form-control" @bind-Value="languageDTO.LanguageName" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Language Code *</label>
+                        <InputText class="form-control" @bind-Value="languageDTO.LanguageCode" />
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <button type="button" class="btn btn-secondary me-2" @onclick="HideLanguageModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            @(isEditingLanguage ? "Update" : "Create")
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Create/Edit Question Modal *@
+<div class="modal fade @(showQuestionModal ? "show d-block" : "")" tabindex="-1"
+     style="@(showQuestionModal ? "background-color: rgba(0,0,0,0.5);" : "")">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">@(isEditingQuestion ? "Edit Question" : "Create Question")</h5>
+                <button type="button" class="btn-close" @onclick="HideQuestionModal"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="questionDTO" OnValidSubmit="SaveQuestion">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary class="alert alert-danger" />
+
+                    <div class="mb-3">
+                        <label class="form-label">Question Text *</label>
+                        <InputText class="form-control" @bind-Value="questionDTO.Text" placeholder="Enter question text" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Type *</label>
+                        <InputSelect class="form-select" @bind-Value="questionDTO.Type">
+                            <option value="">Select type...</option>
+                            <option value="YesNo">Yes/No</option>
+                            <option value="MultipleChoice">Multiple Choice</option>
+                            <option value="Scale">Scale</option>
+                            <option value="Text">Text</option>
+                        </InputSelect>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Order Index *</label>
+                        <InputNumber class="form-control" @bind-Value="questionDTO.OrderIndex" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-check-label">
+                            <InputCheckbox @bind-Value="questionDTO.IsRequired" /> Required
+                        </label>
+                    </div>
+
+                    @if (questionDTO.Type != "Text" && questionDTO.Type != "")
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Options</label>
+                            @foreach (var option in questionDTO.Options)
+                            {
+                                <div class="input-group mb-2">
+                                    <input type="text" class="form-control" @bind="option.Text" placeholder="Option text" />
+                                    <input type="number" class="form-control" @bind="option.Value" placeholder="Value" style="width: 100px;" />
+                                    <input type="number" class="form-control" @bind="option.OrderIndex" placeholder="Order" style="width: 100px;" />
+                                    <button class="btn btn-outline-danger" type="button" @onclick="() => questionDTO.Options.Remove(option)">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                            <button class="btn btn-outline-primary" type="button" @onclick="AddOption">
+                                <i class="fas fa-plus"></i> Add Option
+                            </button>
+                        </div>
+                    }
+
+                    <div class="d-flex justify-content-end">
+                        <button type="button" class="btn btn-secondary me-2" @onclick="HideQuestionModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            @(isEditingQuestion ? "Update" : "Create")
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Response Details Modal *@
+<div class="modal fade @(showResponseModal ? "show d-block" : "")" tabindex="-1"
+     style="@(showResponseModal ? "background-color: rgba(0,0,0,0.5);" : "")">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Response Details</h5>
+                <button type="button" class="btn-close" @onclick="HideResponseModal"></button>
+            </div>
+            <div class="modal-body">
+                @if (selectedResponse != null)
+                {
+                    <dl class="row">
+                        <dt class="col-sm-4">Respondent ID:</dt>
+                        <dd class="col-sm-8">@selectedResponse.RespondentId</dd>
+                        <dt class="col-sm-4">Started At:</dt>
+                        <dd class="col-sm-8">@selectedResponse.StartedAt.ToString("MMM dd, yyyy HH:mm")</dd>
+                        <dt class="col-sm-4">Completed At:</dt>
+                        <dd class="col-sm-8">@(selectedResponse.CompletedAt?.ToString("MMM dd, yyyy HH:mm") ?? "Not Completed")</dd>
+                        <dt class="col-sm-4">Total Score:</dt>
+                        <dd class="col-sm-8">@selectedResponse.TotalScore</dd>
+                        <dt class="col-sm-4">Risk Level:</dt>
+                        <dd class="col-sm-8">
+                            <span class="badge @GetRiskLevelClass(selectedResponse.RiskLevel)">
+                                @selectedResponse.RiskLevel
+                            </span>
+                        </dd>
+                    </dl>
+                    <h5>Answers</h5>
+                    <ul>
+                        @foreach (var answer in selectedResponse.Responses)
+                        {
+                            var question = questions.FirstOrDefault(q => q.Id == answer.QuestionId);
+                            <li>
+                                <strong>@(question?.Text ?? "Unknown Question"):</strong>
+                                @if (answer.TextResponse != null)
+                                {
+                                    <span>@answer.TextResponse</span>
+                                }
+                                else if (answer.SelectedOptionId != null)
+                                {
+                                    var option = question?.Options.FirstOrDefault(o => o.Id == answer.SelectedOptionId);
+                                    <span>@(option?.Text ?? "Unknown Option") (Value: @(answer.NumericResponse ?? 0))</span>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="HideResponseModal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Confirmation Modal *@
+<div class="modal fade @(showConfirmModal ? "show d-block" : "")" tabindex="-1"
+     style="@(showConfirmModal ? "background-color: rgba(0,0,0,0.5);" : "")">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">@confirmTitle</h5>
+                <button type="button" class="btn-close" @onclick="HideConfirmModal"></button>
+            </div>
+            <div class="modal-body">
+                <p>@confirmMessage</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="HideConfirmModal">Cancel</button>
+                <button type="button" class="btn btn-danger" @onclick="ConfirmAction" disabled="@isPerformingAction">
+                    @if (isPerformingAction)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private AssessmentDTO? assessment;
+    private AssessmentDTO editAssessmentDTO = new();
+    private List<AssessmentVersionDTO> versions = new();
+    private List<AssessmentLanguageDTO> languages = new();
+    private List<QuestionDTO> questions = new();
+    private List<AssessmentResponseDTO> responses = new();
+    private AssessmentResponseDTO? selectedResponse;
+    private AssessmentVersionDTO versionDTO = new();
+    private AssessmentLanguageDTO languageDTO = new();
+    private QuestionDTO questionDTO = new();
+    private string activeTab = "basic";
+    private int selectedVersionId;
+    private int selectedLanguageId;
+    private bool isLoading = true;
+    private bool isSaving = false;
+    private bool isPerformingAction = false;
+    private bool showConfirmModal = false;
+    private bool showVersionModal = false;
+    private bool showLanguageModal = false;
+    private bool showQuestionModal = false;
+    private bool showResponseModal = false;
+    private bool isEditingVersion = false;
+    private bool isEditingLanguage = false;
+    private bool isEditingQuestion = false;
+    private string confirmTitle = "";
+    private string confirmMessage = "";
+    private Func<Task>? pendingAction;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAssessmentData();
+    }
+
+    private async Task LoadAssessmentData()
+    {
+        isLoading = true;
+        try
+        {
+            assessment = await AssessmentApiService.GetAssessmentAsync(Id);
+            if (assessment != null)
+            {
+                editAssessmentDTO = new AssessmentDTO
+                {
+                    Id = assessment.Id,
+                    Name = assessment.Name,
+                    Description = assessment.Description,
+                    Type = assessment.Type,
+                    IsActive = assessment.IsActive,
+                    CreatedAt = assessment.CreatedAt
+                };
+                versions = await AssessmentApiService.GetAssessmentVersionsAsync(Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error loading assessment:", ex.Message);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnVersionChanged(ChangeEventArgs e)
+    {
+        selectedVersionId = int.Parse(e.Value?.ToString() ?? "0");
+        await LoadLanguages();
+        selectedLanguageId = 0;
+        questions = new();
+        responses = new();
+        StateHasChanged();
+    }
+
+    private async Task LoadLanguages()
+    {
+        if (selectedVersionId > 0)
+        {
+            try
+            {
+                languages = await AssessmentApiService.GetLanguagesForVersionAsync(selectedVersionId);
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Error loading languages:", ex.Message);
+            }
+        }
+        else
+        {
+            languages = new();
+        }
+    }
+
+    private async Task LoadQuestions(ChangeEventArgs e)
+    {
+        selectedLanguageId = int.Parse(e.Value?.ToString() ?? "0");
+        if (selectedLanguageId > 0)
+        {
+            try
+            {
+                questions = await AssessmentApiService.GetQuestionsForLanguageAsync(selectedLanguageId);
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Error loading questions:", ex.Message);
+            }
+        }
+        else
+        {
+            questions = new();
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadResponses(ChangeEventArgs e)
+    {
+        selectedLanguageId = int.Parse(e.Value?.ToString() ?? "0");
+        if (selectedLanguageId > 0)
+        {
+            try
+            {
+                responses = await AssessmentApiService.GetResponsesAsync(selectedLanguageId);
+                questions = await AssessmentApiService.GetQuestionsForLanguageAsync(selectedLanguageId);
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Error loading responses:", ex.Message);
+            }
+        }
+        else
+        {
+            responses = new();
+            questions = new();
+        }
+        StateHasChanged();
+    }
+
+    private async Task UpdateAssessment()
+    {
+        isSaving = true;
+        try
+        {
+            await AssessmentApiService.UpdateAssessmentAsync(Id, editAssessmentDTO);
+            await LoadAssessmentData();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error updating assessment:", ex.Message);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ShowCreateVersionModal()
+    {
+        versionDTO = new AssessmentVersionDTO { AssessmentId = Id, IsActive = true };
+        isEditingVersion = false;
+        showVersionModal = true;
+    }
+
+    private void ShowEditVersionModal(AssessmentVersionDTO version)
+    {
+        versionDTO = new AssessmentVersionDTO
+        {
+            Id = version.Id,
+            AssessmentId = version.AssessmentId,
+            Version = version.Version,
+            IsActive = version.IsActive,
+            CreatedAt = version.CreatedAt
+        };
+        isEditingVersion = true;
+        showVersionModal = true;
+    }
+
+    private void HideVersionModal()
+    {
+        showVersionModal = false;
+        versionDTO = new();
+    }
+
+    private async Task SaveVersion()
+    {
+        isSaving = true;
+        try
+        {
+            if (isEditingVersion)
+            {
+                await AssessmentApiService.UpdateVersionAsync(versionDTO.Id, versionDTO);
+            }
+            else
+            {
+                await AssessmentApiService.CreateVersionAsync(versionDTO);
+            }
+            await LoadAssessmentData();
+            HideVersionModal();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error saving version:", ex.Message);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ShowCreateLanguageModal()
+    {
+        languageDTO = new AssessmentLanguageDTO { VersionId = selectedVersionId };
+        isEditingLanguage = false;
+        showLanguageModal = true;
+    }
+
+    private void ShowEditLanguageModal(AssessmentLanguageDTO language)
+    {
+        languageDTO = new AssessmentLanguageDTO
+        {
+            Id = language.Id,
+            VersionId = language.VersionId,
+            LanguageCode = language.LanguageCode,
+            LanguageName = language.LanguageName
+        };
+        isEditingLanguage = true;
+        showLanguageModal = true;
+    }
+
+    private void HideLanguageModal()
+    {
+        showLanguageModal = false;
+        languageDTO = new();
+    }
+
+    private async Task SaveLanguage()
+    {
+        isSaving = true;
+        try
+        {
+            if (isEditingLanguage)
+            {
+                await AssessmentApiService.UpdateLanguageAsync(languageDTO.Id, languageDTO);
+            }
+            else
+            {
+                await AssessmentApiService.CreateLanguageAsync(languageDTO);
+            }
+            await LoadLanguages();
+            HideLanguageModal();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error saving language:", ex.Message);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ShowCreateQuestionModal()
+    {
+        questionDTO = new QuestionDTO { LanguageId = selectedLanguageId, Options = new List<QuestionOptionDTO>() };
+        isEditingQuestion = false;
+        showQuestionModal = true;
+    }
+
+    private void ShowEditQuestionModal(QuestionDTO question)
+    {
+        questionDTO = new QuestionDTO
+        {
+            Id = question.Id,
+            LanguageId = question.LanguageId,
+            Text = question.Text,
+            Type = question.Type,
+            IsRequired = question.IsRequired,
+            OrderIndex = question.OrderIndex,
+            Options = question.Options.Select(o => new QuestionOptionDTO
+            {
+                Id = o.Id,
+                Text = o.Text,
+                Value = o.Value,
+                OrderIndex = o.OrderIndex
+            }).ToList()
+        };
+        isEditingQuestion = true;
+        showQuestionModal = true;
+    }
+
+    private void HideQuestionModal()
+    {
+        showQuestionModal = false;
+        questionDTO = new();
+    }
+
+    private void AddOption()
+    {
+        questionDTO.Options.Add(new QuestionOptionDTO { OrderIndex = questionDTO.Options.Count + 1 });
+    }
+
+    private async Task SaveQuestion()
+    {
+        isSaving = true;
+        try
+        {
+            if (isEditingQuestion)
+            {
+                await AssessmentApiService.UpdateQuestionAsync(questionDTO.Id, questionDTO);
+            }
+            else
+            {
+                await AssessmentApiService.CreateQuestionAsync(questionDTO);
+            }
+            await LoadQuestions(new ChangeEventArgs { Value = selectedLanguageId.ToString() });
+            HideQuestionModal();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error saving question:", ex.Message);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task ShowResponseDetails(int id)
+    {
+        try
+        {
+            selectedResponse = await AssessmentApiService.GetResponseAsync(id);
+            showResponseModal = true;
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error loading response:", ex.Message);
+        }
+    }
+
+    private void HideResponseModal()
+    {
+        showResponseModal = false;
+        selectedResponse = null;
+    }
+
+    private void ConfirmDeleteAssessment()
+    {
+        confirmTitle = "Delete Assessment";
+        confirmMessage = "Are you sure you want to delete this entire assessment? This action cannot be undone.";
+        pendingAction = DeleteAssessment;
+        showConfirmModal = true;
+    }
+
+    private void ConfirmDeleteVersion(int id)
+    {
+        confirmTitle = "Delete Version";
+        confirmMessage = "Are you sure you want to delete this version? This action cannot be undone.";
+        pendingAction = () => DeleteVersion(id);
+        showConfirmModal = true;
+    }
+
+    private void ConfirmDeleteLanguage(int id)
+    {
+        confirmTitle = "Delete Language";
+        confirmMessage = "Are you sure you want to delete this language? This action cannot be undone.";
+        pendingAction = () => DeleteLanguage(id);
+        showConfirmModal = true;
+    }
+
+    private void ConfirmDeleteQuestion(int id)
+    {
+        confirmTitle = "Delete Question";
+        confirmMessage = "Are you sure you want to delete this question? This action cannot be undone.";
+        pendingAction = () => DeleteQuestion(id);
+        showConfirmModal = true;
+    }
+
+    private void ConfirmDeleteResponse(int id)
+    {
+        confirmTitle = "Delete Response";
+        confirmMessage = "Are you sure you want to delete this response? This action cannot be undone.";
+        pendingAction = () => DeleteResponse(id);
+        showConfirmModal = true;
+    }
+
+    private void HideConfirmModal()
+    {
+        showConfirmModal = false;
+        pendingAction = null;
+    }
+
+    private async Task ConfirmAction()
+    {
+        if (pendingAction != null)
+        {
+            isPerformingAction = true;
+            try
+            {
+                await pendingAction();
+            }
+            finally
+            {
+                isPerformingAction = false;
+                HideConfirmModal();
+            }
+        }
+    }
+
+    private async Task DeleteAssessment()
+    {
+        try
+        {
+            await AssessmentApiService.DeleteAssessmentAsync(Id);
+            Navigation.NavigateTo("/Management/Assessment", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error deleting assessment:", ex.Message);
+        }
+    }
+
+    private async Task DeleteVersion(int id)
+    {
+        try
+        {
+            await AssessmentApiService.DeleteVersionAsync(id);
+            await LoadAssessmentData();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error deleting version:", ex.Message);
+        }
+    }
+
+    private async Task DeleteLanguage(int id)
+    {
+        try
+        {
+            await AssessmentApiService.DeleteLanguageAsync(id);
+            await LoadLanguages();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error deleting language:", ex.Message);
+        }
+    }
+
+    private async Task DeleteQuestion(int id)
+    {
+        try
+        {
+            await AssessmentApiService.DeleteQuestionAsync(id);
+            await LoadQuestions(new ChangeEventArgs { Value = selectedLanguageId.ToString() });
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error deleting question:", ex.Message);
+        }
+    }
+
+    private async Task DeleteResponse(int id)
+    {
+        try
+        {
+            await AssessmentApiService.DeleteResponseAsync(id);
+            await LoadResponses(new ChangeEventArgs { Value = selectedLanguageId.ToString() });
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error deleting response:", ex.Message);
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/Management/Assessment", forceLoad: true);
+    }
+
+    private void NavigateToView()
+    {
+        Navigation.NavigateTo($"/Management/Assessment/{Id}", forceLoad: true);
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        switch (tab)
+        {
+            
+        }
+        activeTab = tab;
+        if (tab != "questions" && tab != "responses")
+        {
+            selectedVersionId = 0;
+            selectedLanguageId = 0;
+            questions = new();
+            responses = new();
+        }
+    }
+
+    private string GetRiskLevelClass(string? riskLevel)
+    {
+        return riskLevel?.ToLower() switch
+        {
+            "low" => "bg-success",
+            "medium" => "bg-warning",
+            "high" => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+}

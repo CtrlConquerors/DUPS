@@ -6,98 +6,86 @@ namespace DUPSS.API.Models.AccessLayer
 
     public class AppDbContext : DbContext
     {
+        // Existing DbSets
         public DbSet<Role> Role { get; set; }
         public DbSet<User> User { get; set; }
         public DbSet<Appointment> Appointment { get; set; }
         public DbSet<Campaign> Campaign { get; set; }
         public DbSet<CourseTopic> CourseTopic { get; set; }
-        public DbSet<Course> Course { get; set; } // Make sure Course class has ImageUrl property
+        public DbSet<Course> Course { get; set; }
         public DbSet<CourseEnroll> CourseEnroll { get; set; }
-        public DbSet<Assessment> Assessment { get; set; }
-        public DbSet<AssessmentResult> AssessmentResult { get; set; }
-        public DbSet<AssessmentQuestion> AssessmentQuestion { get; set; }
-        public DbSet<AssessmentAnswer> AssessmentAnswer { get; set; } 
         public DbSet<Blog> Blog { get; set; }
         public DbSet<BlogTopic> BlogTopic { get; set; }
-
         public DbSet<CampaignRegistration> CampaignRegistrations { get; set; }
-
         public DbSet<Appointment> Appointments { get; set; } = null!;
 
+        // Add new DbSets for Assessment models
+        public DbSet<Assessment> Assessments { get; set; }
+        public DbSet<AssessmentVersion> AssessmentVersions { get; set; }
+        public DbSet<AssessmentLanguage> AssessmentLanguages { get; set; }
+        public DbSet<Question> Questions { get; set; }
+        public DbSet<QuestionOption> QuestionOptions { get; set; }
+        public DbSet<AssessmentResponse> AssessmentResponses { get; set; }
+        public DbSet<QuestionResponse> QuestionResponses { get; set; }
 
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            // Tell Entity Framework Core to ignore the ImageUrl property on the Course entity
-            // This is crucial because ImageUrl is dynamically set in the DAO, not stored in the DB.
-            modelBuilder.Entity<Course>()
-                .Ignore(c => c.ImageUrl); // <--- ADDED THIS LINE
+            base.OnModelCreating(modelBuilder); // It's good practice to call the base method.
 
-            modelBuilder.Entity<Course>()
-               .Ignore(c => c.ImageUrl2); // For consultant picture in course detail
+            // Existing configurations
+            modelBuilder.Entity<Course>().Ignore(c => c.ImageUrl);
+            modelBuilder.Entity<Course>().Ignore(c => c.ImageUrl2);
+            modelBuilder.Entity<Campaign>().Ignore(c => c.ImageUrl);
+            modelBuilder.Entity<User>().Ignore(u => u.ImageUrl);
 
-            modelBuilder.Entity<Campaign>()
-               .Ignore(c => c.ImageUrl);
-
-            modelBuilder.Entity<User>()
-               .Ignore(u => u.ImageUrl);
-
-            // Role -> Users (one-to-many)
             modelBuilder.Entity<User>()
                 .HasOne(u => u.Role)
                 .WithMany(r => r.Users)
                 .HasForeignKey(u => u.RoleId);
 
-            // Users -> Appointments (member and consultant, one-to-many)
             modelBuilder.Entity<Appointment>()
                 .HasOne(a => a.Member)
                 .WithMany(u => u.MemberAppointments)
                 .HasForeignKey(a => a.MemberId);
+
             modelBuilder.Entity<Appointment>()
                 .HasOne(a => a.Consultant)
                 .WithMany(u => u.ConsultantAppointments)
                 .HasForeignKey(a => a.ConsultantId);
 
-            // Users -> Campaigns (one-to-many)
             modelBuilder.Entity<Campaign>()
                 .HasOne(c => c.Staff)
                 .WithMany(u => u.Campaigns)
                 .HasForeignKey(c => c.StaffId);
 
-
-            // CourseTopic -> Courses (one-to-many)
             modelBuilder.Entity<Course>()
                 .HasOne(c => c.Topic)
                 .WithMany(t => t.Courses)
                 .HasForeignKey(c => c.TopicId);
 
-            // Users -> Courses (one-to-many)
             modelBuilder.Entity<Course>()
                 .HasOne(c => c.Staff)
                 .WithMany(u => u.Courses)
                 .HasForeignKey(c => c.StaffId);
 
-            // Users -> CourseEnroll (one-to-many)
             modelBuilder.Entity<CourseEnroll>()
                 .HasOne(ce => ce.Member)
                 .WithMany(u => u.Enrollments)
                 .HasForeignKey(ce => ce.MemberId);
 
-            // Course -> CourseEnroll (one-to-many)
             modelBuilder.Entity<CourseEnroll>()
                 .HasOne(ce => ce.Course)
                 .WithMany(c => c.Enrollments)
                 .HasForeignKey(ce => ce.CourseId);
 
-            // Users -> Blogs (one-to-many)
             modelBuilder.Entity<Blog>()
                 .HasOne(b => b.Staff)
                 .WithMany(u => u.Blogs)
                 .HasForeignKey(b => b.StaffId);
 
-            // BlogTopic -> Blogs (one-to-many)
             modelBuilder.Entity<Blog>()
                 .HasOne(b => b.BlogTopic)
                 .WithMany(bt => bt.Blogs)
@@ -113,45 +101,63 @@ namespace DUPSS.API.Models.AccessLayer
                 .WithMany()
                 .HasForeignKey(r => r.CampaignId);
 
-            // Assessment -> AssessmentResult (one-to-many)
-            modelBuilder.Entity<AssessmentResult>()
-                .HasOne(ar => ar.Assessment)
-                .WithMany(a => a.Results)
-                .HasForeignKey(ar => ar.AssessmentId);
+            // New configurations for Assessment models
 
-            // Users -> AssessmentResult (one-to-many)
-            modelBuilder.Entity<AssessmentResult>()
-                .HasOne(ar => ar.Member)
-                .WithMany(u => u.AssessmentResults)
-                .HasForeignKey(ar => ar.MemberId);
+            // Assessment -> AssessmentVersion (one-to-many)
+            modelBuilder.Entity<AssessmentVersion>()
+                .HasOne(v => v.Assessment)
+                .WithMany(a => a.Versions)
+                .HasForeignKey(v => v.AssessmentId);
 
-            // Assessment -> AssessmentQuestion (one-to-many)
-            modelBuilder.Entity<AssessmentQuestion>()
-                .HasOne(a => a.Assessment)
-                .WithMany(a => a.Questions)
-                .HasForeignKey(q => q.AssessmentId);
+            // AssessmentVersion -> AssessmentLanguage (one-to-many)
+            modelBuilder.Entity<AssessmentLanguage>()
+                .HasOne(l => l.Version)
+                .WithMany(v => v.Languages)
+                .HasForeignKey(l => l.VersionId);
 
-            // AssessmentQuestion -> AssessmentAnswer (one-to-many)
-            modelBuilder.Entity<AssessmentAnswer>()
-                .HasOne(q => q.Question)
-                .WithMany(q => q.Answers)
-                .HasForeignKey(a => a.QuestionId);
+            // AssessmentLanguage -> Question (one-to-many)
+            modelBuilder.Entity<Question>()
+                .HasOne(q => q.Language)
+                .WithMany(l => l.Questions)
+                .HasForeignKey(q => q.LanguageId);
 
+            // Question -> QuestionOption (one-to-many)
+            modelBuilder.Entity<QuestionOption>()
+                .HasOne(o => o.Question)
+                .WithMany(q => q.Options)
+                .HasForeignKey(o => o.QuestionId);
 
-            // Configure indexes (optional, as schema already defines them)
-            modelBuilder.Entity<User>().HasIndex(u => u.RoleId);
-            modelBuilder.Entity<Appointment>().HasIndex(a => a.MemberId);
-            modelBuilder.Entity<Appointment>().HasIndex(a => a.ConsultantId);
-            modelBuilder.Entity<Campaign>().HasIndex(c => c.StaffId);
-            modelBuilder.Entity<Course>().HasIndex(c => c.TopicId);
-            modelBuilder.Entity<Course>().HasIndex(c => c.StaffId);
-            modelBuilder.Entity<CourseEnroll>().HasIndex(ce => ce.MemberId);
-            modelBuilder.Entity<CourseEnroll>().HasIndex(ce => ce.CourseId);
-            modelBuilder.Entity<AssessmentResult>().HasIndex(ar => ar.AssessmentId);
-            modelBuilder.Entity<AssessmentResult>().HasIndex(ar => ar.MemberId);
-            modelBuilder.Entity<Blog>().HasIndex(b => b.StaffId);
-            modelBuilder.Entity<BlogTopic>().HasIndex(bt => bt.BlogTopicId);
+            // AssessmentLanguage -> AssessmentResponse (one-to-many)
+            modelBuilder.Entity<AssessmentResponse>()
+                .HasOne(r => r.Language)
+                .WithMany() // No inverse navigation property
+                .HasForeignKey(r => r.LanguageId);
 
+            // AssessmentResponse -> QuestionResponse (one-to-many)
+            modelBuilder.Entity<QuestionResponse>()
+                .HasOne(qr => qr.AssessmentResponse)
+                .WithMany(ar => ar.Responses)
+                .HasForeignKey(qr => qr.AssessmentResponseId);
+
+            // Relationships for QuestionResponse
+            modelBuilder.Entity<QuestionResponse>()
+                .HasOne(qr => qr.Question)
+                .WithMany() // No inverse navigation
+                .HasForeignKey(qr => qr.QuestionId);
+
+            modelBuilder.Entity<QuestionResponse>()
+                .HasOne(qr => qr.SelectedOption)
+                .WithMany() // No inverse navigation
+                .HasForeignKey(qr => qr.SelectedOptionId);
+
+            // Indexes for foreign keys
+            modelBuilder.Entity<AssessmentVersion>().HasIndex(v => v.AssessmentId);
+            modelBuilder.Entity<AssessmentLanguage>().HasIndex(l => l.VersionId);
+            modelBuilder.Entity<Question>().HasIndex(q => q.LanguageId);
+            modelBuilder.Entity<QuestionOption>().HasIndex(o => o.QuestionId);
+            modelBuilder.Entity<AssessmentResponse>().HasIndex(r => r.LanguageId);
+            modelBuilder.Entity<QuestionResponse>().HasIndex(qr => qr.AssessmentResponseId);
+            modelBuilder.Entity<QuestionResponse>().HasIndex(qr => qr.QuestionId);
         }
     }
 }

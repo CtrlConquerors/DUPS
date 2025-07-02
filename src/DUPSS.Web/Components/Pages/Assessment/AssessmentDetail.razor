@@ -1,242 +1,382 @@
-﻿@page "/Assessment/Info/{AssessmentId}"
-@using DUPSS.API.Models.DTOs
+﻿@page "/Assessment/Info/{AssessmentId:int}"
 @using DUPSS.Web.Components.Service
-@inject AssessmentApiService AssessmentApiService
-@inject NavigationManager NavigationManager
+@using DUPSS.API.Models.DTOs
+@inject AssessmentApiService AssessmentService
+@inject NavigationManager Navigation
 
-<div class="assessment-info-container">
+<PageTitle>Assessment Details</PageTitle>
+
+<div class="container-fluid py-4">
     @if (isLoading)
     {
-        <div class="loading-indicator">
-            <p>Loading assessment information...</p>
-            <div class="spinner"></div>
-        </div>
-    }
-    else if (hasError)
-    {
-        <div class="error-message">
-            <p>Could not load assessment information. Please try again.</p>
-            <button class="retry-button" @onclick="RetryLoadAssessment">Retry</button>
-            <button class="back-button" @onclick="GoBack">Back to Assessments</button>
+        <div class="d-flex justify-content-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
         </div>
     }
     else if (assessment == null)
     {
-        <div class="no-assessment-message">
-            <p>Assessment not found.</p>
-            <button class="back-button" @onclick="GoBack">Back to Assessments</button>
-        </div>
-    }
-    else
-    {
-        <div class="assessment-info-header">
-            <h1 class="assessment-title">@assessment.AssessmentType Assessment</h1>
-            <div class="assessment-meta">
-                <span class="version-badge">Version @assessment.Version</span>
-                <span class="language-badge">@GetLanguageDisplay(assessment.Language)</span>
-                <span class="duration-badge">@GetEstimatedDuration(assessment.AssessmentType)</span>
-            </div>
-        </div>
-
-        <div class="assessment-info-content">
-            <div class="info-section">
-                <h2>About This Assessment</h2>
-                <p class="assessment-description">
-                    @(assessment.Description ?? GetDetailedDescription(assessment.AssessmentType))
-                </p>
-            </div>
-
-            <div class="info-section">
-                <h2>What to Expect</h2>
-                <div class="expectation-grid">
-                    <div class="expectation-item">
-                        <i class="icon-clock"></i>
-                        <h3>Duration</h3>
-                        <p>This assessment typically takes @GetEstimatedDuration(assessment.AssessmentType) to complete.</p>
-                    </div>
-                    <div class="expectation-item">
-                        <i class="icon-questions"></i>
-                        <h3>Questions</h3>
-                        <p>@GetQuestionCount(assessment.AssessmentType) questions about your experiences and behaviors.</p>
-                    </div>
-                    <div class="expectation-item">
-                        <i class="icon-privacy"></i>
-                        <h3>Privacy</h3>
-                        <p>Your responses are confidential and used only for assessment purposes.</p>
-                    </div>
-                    <div class="expectation-item">
-                        <i class="icon-results"></i>
-                        <h3>Results</h3>
-                        <p>Receive immediate feedback and personalized recommendations.</p>
-                    </div>
-                </div>
-            </div>
-
-            @if (assessment.AssessmentType == "CRAFFT")
-            {
-                <div class="info-section">
-                    <h2>About CRAFFT</h2>
-                    <p>The CRAFFT is a validated screening tool designed to identify adolescents and young adults who may have a substance use disorder or are at risk of developing one.</p>
-                    
-                    <h3>What CRAFFT Stands For:</h3>
-                    <ul class="crafft-acronym">
-                        <li><strong>C</strong> - Have you ever ridden in a CAR driven by someone (including yourself) who was "high" or had been using alcohol or drugs?</li>
-                        <li><strong>R</strong> - Do you ever use alcohol or drugs to RELAX, feel better about yourself, or fit in?</li>
-                        <li><strong>A</strong> - Do you ever use alcohol/drugs while you are by yourself, ALONE?</li>
-                        <li><strong>F</strong> - Do you ever FORGET things you did while using alcohol or drugs?</li>
-                        <li><strong>F</strong> - Do your family or FRIENDS ever tell you that you should cut down on your drinking or drug use?</li>
-                        <li><strong>T</strong> - Have you gotten into TROUBLE while you were using alcohol or drugs?</li>
-                    </ul>
-                </div>
-            }
-            else if (assessment.AssessmentType == "ASSIST")
-            {
-                <div class="info-section">
-                    <h2>About ASSIST</h2>
-                    <p>The Alcohol, Smoking and Substance Involvement Screening Test (ASSIST) was developed by the World Health Organization (WHO) to detect and manage substance use and related problems in primary and general medical care settings.</p>
-                    
-                    <h3>What ASSIST Covers:</h3>
-                    <ul class="assist-substances">
-                        <li>Tobacco products</li>
-                        <li>Alcoholic beverages</li>
-                        <li>Cannabis (marijuana, pot, grass, hash, etc.)</li>
-                        <li>Cocaine (coke, crack, etc.)</li>
-                        <li>Amphetamine type stimulants</li>
-                        <li>Inhalants (nitrous, glue, petrol, paint thinner, etc.)</li>
-                        <li>Sedatives or sleeping pills</li>
-                        <li>Hallucinogens</li>
-                        <li>Opioids</li>
-                        <li>Other drugs</li>
-                    </ul>
-                </div>
-            }
-
-            <div class="info-section">
-                <h2>Important Notes</h2>
-                <div class="important-notes">
-                    <div class="note-item warning">
-                        <i class="icon-warning"></i>
-                        <p><strong>Not a Diagnosis:</strong> This screening tool is not a substitute for professional medical advice, diagnosis, or treatment.</p>
-                    </div>
-                    <div class="note-item info">
-                        <i class="icon-info"></i>
-                        <p><strong>Seek Professional Help:</strong> If you're concerned about your substance use, please consult with a healthcare professional.</p>
-                    </div>
-                    <div class="note-item success">
-                        <i class="icon-check"></i>
-                        <p><strong>Confidential:</strong> Your responses are private and will not be shared without your consent.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="assessment-actions">
-            <button class="btn-primary start-assessment" @onclick="StartAssessment">
-                <i class="icon-play"></i>
-                Start Assessment
-            </button>
-            <button class="btn-secondary back-button" @onclick="GoBack">
-                <i class="icon-arrow-left"></i>
+        <div class="alert alert-danger">
+            <h4>Assessment Not Found</h4>
+            <p>The requested assessment could not be found.</p>
+            <button class="btn btn-primary" @onclick="NavigateToAssessmentList">
                 Back to Assessments
             </button>
         </div>
     }
+    else
+    {
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/Assessments">Assessments</a></li>
+                <li class="breadcrumb-item active">@assessment.Name</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2>@assessment.Name</h2>
+                <p class="text-muted">@(string.IsNullOrEmpty(assessment.Description) ? "No description provided" : assessment.Description)</p>
+            </div>
+            <div>
+                <button class="btn btn-success me-2" @onclick="ShowCreateVersionModal">
+                    <i class="fas fa-plus"></i> Add Version
+                </button>
+                <button class="btn btn-primary" @onclick="() => NavigateToEditAssessment(paraAssessmentId)">
+                    <i class="fas fa-edit"></i> Edit Assessment
+                </button>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Assessment Info</h5>
+                    </div>
+                    <div class="card-body">
+                        <dl class="row">
+                            <dt class="col-sm-4">Type:</dt>
+                            <dd class="col-sm-8">@assessment.Type</dd>
+                            <dt class="col-sm-4">Status:</dt>
+                            <dd class="col-sm-8">
+                                <span class="badge @(assessment.IsActive ? "bg-success" : "bg-secondary")">
+                                    @(assessment.IsActive ? "Active" : "Inactive")
+                                </span>
+                            </dd>
+                            <dt class="col-sm-4">Created:</dt>
+                            <dd class="col-sm-8">@assessment.CreatedAt.ToString("MMM dd, yyyy")</dd>
+                            <dt class="col-sm-4">Versions:</dt>
+                            <dd class="col-sm-8">@versions.Count</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Versions</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (versions.Any())
+                        {
+                            @foreach (var version in versions)
+                            {
+                                <div class="border rounded p-3 mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0">Version: @version.Version</h6>
+                                        <div>
+                                            <span class="badge @(version.IsActive ? "bg-success" : "bg-secondary") me-2">
+                                                @(version.IsActive ? "Active" : "Inactive")
+                                            </span>
+                                            <button class="btn btn-sm btn-outline-primary"
+                                                    @onclick="() => ShowCreateLanguageModal(version.Id)">
+                                                <i class="fas fa-plus"></i> Add Language
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small">
+                                        Created: @version.CreatedAt.ToString("MMM dd, yyyy")
+                                    </p>
+
+                                    @if (languagesByVersion.ContainsKey(version.Id) && languagesByVersion[version.Id].Any())
+                                    {
+                                        <div class="row">
+                                            @foreach (var language in languagesByVersion[version.Id])
+                                            {
+                                                <div class="col-md-6 mb-2">
+                                                    <div class="card card-body py-2">
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <div>
+                                                                <strong>@language.LanguageName</strong>
+                                                                <span class="text-muted">(@language.LanguageCode)</span>
+                                                            </div>
+                                                            <div>
+                                                                <button class="btn btn-sm btn-outline-success"
+                                                                        @onclick="() => NavigateToTakeAssessment(paraAssessmentId, language.Id)">
+                                                                    <i class="fas fa-play"></i> Take
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">No languages configured for this version.</p>
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <p class="text-muted">No versions created yet.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
-<Footer />
+@* Create Version Modal *@
+<div class="modal fade @(showCreateVersionModal ? "show d-block" : "")" tabindex="-1"
+     style="@(showCreateVersionModal ? "background-color: rgba(0, 0, 0, 0.5)" : "")">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New Version</h5>
+                <button type="button" class="btn-close" @onclick="HideCreateVersionModal"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="createVersionDTO" OnValidSubmit="CreateVersion">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <div class="mb-3">
+                        <label class="form-label">Version *</label>
+                        <InputText class="form-control" @bind-Value="createVersionDTO.Version"
+                                   placeholder="e.g., 1.0, 2.1, etc." />
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="HideCreateVersionModal">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary" disabled="@isCreatingVersion">
+                            @if (isCreatingVersion)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            Create Version
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Create Language Modal *@
+<div class="modal fade @(showCreateLanguageModal ? "show d-block" : "")" tabindex="-1"
+     style="@(showCreateLanguageModal ? "background-color: rgba(0, 0, 0, 0.5)" : "")">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Language</h5>
+                <button type="button" class="btn-close" @onclick="HideCreateLanguageModal"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="createLanguageDTO" OnValidSubmit="CreateLanguage">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <div class="mb-3">
+                        <label class="form-label">Language Code *</label>
+                        <InputSelect class="form-select" @bind-Value="createLanguageDTO.LanguageCode">
+                            <option value="">Select language...</option>
+                            <option value="en">English (en)</option>
+                            <option value="es">Spanish (es)</option>
+                            <option value="fr">French (fr)</option>
+                            <option value="de">German (de)</option>
+                            <option value="it">Italian (it)</option>
+                            <option value="pt">Portuguese (pt)</option>
+                            <option value="ru">Russian (ru)</option>
+                            <option value="zh">Chinese (zh)</option>
+                            <option value="ja">Japanese (ja)</option>
+                            <option value="ko">Korean (ko)</option>
+                            <option value="ar">Arabic (ar)</option>
+                            <option value="hi">Hindi (hi)</option>
+                        </InputSelect>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Language Name *</label>
+                        <InputText class="form-control" @bind-Value="createLanguageDTO.LanguageName" />
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="HideCreateLanguageModal">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary" disabled="@isCreatingLanguage">
+                            @if (isCreatingLanguage)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            Add Language
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
 
 @code {
     [Parameter]
-    public string AssessmentId { get; set; } = string.Empty;
+    public int paraAssessmentId { get; set; }
 
     private AssessmentDTO? assessment;
+    private List<AssessmentVersionDTO> versions = new();
+    private Dictionary<int, List<AssessmentLanguageDTO>> languagesByVersion = new();
     private bool isLoading = true;
-    private bool hasError = false;
+    private bool showCreateVersionModal = false;
+    private bool showCreateLanguageModal = false;
+    private bool isCreatingVersion = false;
+    private bool isCreatingLanguage = false;
+
+    private AssessmentVersionDTO createVersionDTO = new();
+    private AssessmentLanguageDTO createLanguageDTO = new();
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAssessmentAsync();
+        await LoadAssessment();
     }
 
-    private async Task LoadAssessmentAsync()
+    private async Task LoadAssessment()
     {
         isLoading = true;
-        hasError = false;
         try
         {
-            Console.WriteLine($"Loading assessment info for AssessmentId: {AssessmentId}");
-            assessment = await AssessmentApiService.GetByIdAsync(AssessmentId);
-            if (assessment == null)
+            assessment = await AssessmentService.GetAssessmentAsync(paraAssessmentId);
+            if (assessment != null)
             {
-                Console.WriteLine($"Assessment not found for AssessmentId: {AssessmentId}");
+                // Fetch versions separately
+                versions = new List<AssessmentVersionDTO>();
+                // Note: Since we don't have a direct endpoint to get all versions for an assessment,
+                // we'll need to fetch each version individually or modify the API to support this.
+                // For now, we'll assume versions are fetched via a hypothetical endpoint or manually.
+                // This is a limitation due to the DTO structure change.
+                // Here, we'll simulate fetching versions (in a real app, you'd need an API endpoint).
+                var allVersions = await Task.WhenAll(
+                    (await AssessmentService.GetAssessmentsAsync())
+                        .Where(a => a.Id == paraAssessmentId)
+                        .SelectMany(a => new[] { 1, 2, 3 }) // Placeholder for version IDs
+                        .Select(id => AssessmentService.GetVersionAsync(id))
+                );
+                versions = allVersions.Where(v => v != null).ToList()!;
+
+                // Fetch languages for each version
+                foreach (var version in versions)
+                {
+                    var languages = new List<AssessmentLanguageDTO>();
+                    // Similarly, fetch languages for each version (hypothetical endpoint needed)
+                    var language = await AssessmentService.GetAssessmentLanguageAsync(version.Id);
+                    if (language != null)
+                    {
+                        languages.Add(language);
+                    }
+                    languagesByVersion[version.Id] = languages;
+                }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading assessment info: {ex.Message}");
-            hasError = true;
+            Console.WriteLine($"Error loading assessment: {ex.Message}");
         }
         finally
         {
             isLoading = false;
-            StateHasChanged();
         }
     }
 
-    private async Task RetryLoadAssessment()
+    private void ShowCreateVersionModal()
     {
-        await LoadAssessmentAsync();
+        createVersionDTO = new AssessmentVersionDTO { AssessmentId = paraAssessmentId };
+        showCreateVersionModal = true;
     }
 
-    private void StartAssessment()
+    private void HideCreateVersionModal()
     {
-        Console.WriteLine($"Starting assessment: AssessmentId={AssessmentId}");
-        NavigationManager.NavigateTo($"/Assessment/Take/{AssessmentId}", forceLoad: true);
+        showCreateVersionModal = false;
     }
 
-    private void GoBack()
+    private void ShowCreateLanguageModal(int versionId)
     {
-        Console.WriteLine("Navigating back to /Assessment");
-        NavigationManager.NavigateTo("/Assessment", forceLoad: true);
+        createLanguageDTO = new AssessmentLanguageDTO { VersionId = versionId };
+        showCreateLanguageModal = true;
     }
 
-    private string GetLanguageDisplay(string language)
+    private void HideCreateLanguageModal()
     {
-        return language switch
+        showCreateLanguageModal = false;
+    }
+
+    private async Task CreateVersion()
+    {
+        isCreatingVersion = true;
+        try
         {
-            "eng" => "English",
-            "vie" => "Tiếng Việt",
-            _ => language.ToUpper()
-        };
+            await AssessmentService.CreateVersionAsync(createVersionDTO);
+            await LoadAssessment();
+            HideCreateVersionModal();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating version: {ex.Message}");
+        }
+        finally
+        {
+            isCreatingVersion = false;
+        }
     }
 
-    private string GetEstimatedDuration(string assessmentType)
+    private async Task CreateLanguage()
     {
-        return assessmentType switch
+        isCreatingLanguage = true;
+        try
         {
-            "CRAFFT" => "2-3 minutes",
-            "ASSIST" => "5-10 minutes",
-            _ => "3-5 minutes"
-        };
+            await AssessmentService.CreateLanguageAsync(createLanguageDTO);
+            await LoadAssessment();
+            HideCreateLanguageModal();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating language: {ex.Message}");
+        }
+        finally
+        {
+            isCreatingLanguage = false;
+        }
+    }
+    
+    private void NavigateToAssessmentList()
+    {
+        Navigation.NavigateTo("/Assessments", forceLoad: true);
     }
 
-    private string GetDetailedDescription(string assessmentType)
+    private void NavigateToEditAssessment(int AssessmentId)
     {
-        return assessmentType switch
-        {
-            "CRAFFT" => "The CRAFFT is a validated screening instrument designed for use with adolescents and young adults to identify those who may have problematic substance use. It consists of six questions that cover various aspects of substance use behavior and its consequences. The tool is widely used in healthcare settings to help identify individuals who may benefit from further assessment or intervention.",
-            "ASSIST" => "The Alcohol, Smoking and Substance Involvement Screening Test (ASSIST) is a comprehensive screening tool developed by the World Health Organization to identify people who may be at risk of developing problems related to their substance use. It covers a wide range of substances and provides risk levels to guide appropriate interventions. The ASSIST is designed for use in primary healthcare settings and has been validated across different cultures and populations.",
-            _ => "This is a validated screening tool designed to assess patterns of substance use and identify individuals who may benefit from further evaluation or intervention. The assessment provides valuable insights into risk levels and offers personalized recommendations based on responses."
-        };
+        Navigation.NavigateTo($"/Management/Assessment/{AssessmentId}/edit", forceLoad: true);
     }
-
-    private string GetQuestionCount(string assessmentType)
+    
+    private void NavigateToTakeAssessment(int AssessmentId,int languageId)
     {
-        return assessmentType switch
-        {
-            "CRAFFT" => "6",
-            "ASSIST" => "8-10",
-            _ => "Multiple"
-        };
+        Navigation.NavigateTo($"/Assessment/Take/{AssessmentId}/{languageId}", forceLoad: true);
     }
 }

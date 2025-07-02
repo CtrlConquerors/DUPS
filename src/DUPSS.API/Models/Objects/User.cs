@@ -42,7 +42,7 @@ namespace DUPSS.API.Models.Objects
         [JsonIgnore]
         public List<CourseEnroll> Enrollments { get; set; } = new List<CourseEnroll>();
         [JsonIgnore]
-        public List<AssessmentResult> AssessmentResults { get; set; } = new List<AssessmentResult>();
+        public List<AssessmentResponse> AssessmentResponses { get; set; } = new List<AssessmentResponse>();
         [JsonIgnore]
         public List<Blog> Blogs { get; set; } = new List<Blog>();
     }

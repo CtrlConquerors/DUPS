@@ -72,12 +72,6 @@ builder.Services.AddScoped<CampaignRegistrationApiService>(sp => new CampaignReg
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("ApiClient")));
 builder.Services.AddScoped<AssessmentApiService>(sp => new AssessmentApiService(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("ApiClient")));
-builder.Services.AddScoped<AssessmentQuestionApiService>(sp => new AssessmentQuestionApiService(
-    sp.GetRequiredService<IHttpClientFactory>().CreateClient("ApiClient")));
-builder.Services.AddScoped<AssessmentAnswerApiService>(sp => new AssessmentAnswerApiService(
-    sp.GetRequiredService<IHttpClientFactory>().CreateClient("ApiClient")));
-builder.Services.AddScoped<AssessmentResultApiService>(sp => new AssessmentResultApiService(
-    sp.GetRequiredService<IHttpClientFactory>().CreateClient("ApiClient")));
 
 builder.Services.AddScoped<EmailService>();
 

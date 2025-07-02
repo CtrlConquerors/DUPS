@@ -1,18 +1,18 @@
-﻿@page "/Assessment"  
-@using DUPSS.Web.Components.Service  
-@using DUPSS.API.Models.DTOs   
-@inject NavigationManager NavigationManager  
-@inject AssessmentApiService AssessmentApiService  
-@inject IJSRuntime JSRuntime  
+﻿@page "/Assessment"
+@using DUPSS.Web.Components.Service
+@using DUPSS.API.Models.DTOs
+@inject NavigationManager NavigationManager
+@inject AssessmentApiService AssessmentApiService
+@inject IJSRuntime JSRuntime
 
 <div class="assessment-page-container">
     <h1 class="page-title">Mental Health & Substance Use Assessments</h1>
     <p class="page-description">
-        Complete validated screening tools to assess your mental health and substance use patterns. 
+        Complete validated screening tools to assess your mental health and substance use patterns.
         These assessments provide insights and recommendations for your wellbeing.
     </p>
 
-    @if (assessments == null)
+    @if (displayAssessments == null && !hasError)
     {
         <div class="loading-indicator">
             <p>Loading assessments...</p>
@@ -26,7 +26,7 @@
             <button class="retry-button" @onclick="RetryLoadAssessments">Retry</button>
         </div>
     }
-    else if (!assessments.Any())
+    else if (!displayAssessments.Any())
     {
         <div class="no-assessment-message">
             <p>No assessments available at the moment. Please check back later!</p>
@@ -35,7 +35,7 @@
     else
     {
         <div class="assessment-grid">
-            @foreach (var item in showAllAssessments ? assessments : assessments.Take(DefaultAssessmentDisplayLimit))
+            @foreach (var item in showAllAssessments ? displayAssessments : displayAssessments.Take(DefaultAssessmentDisplayLimit))
             {
                 <div class="assessment-card">
                     <div class="card-header">
@@ -44,9 +44,9 @@
                     </div>
                     <div class="card-content">
                         <p class="assessment-description">
-                            @(item.Description != null && item.Description.Length > 150 
-                                ? item.Description.Substring(0, 150) + "..." 
-                                : item.Description ?? GetDefaultDescription(item.AssessmentType))
+                            @(item.Description.Length > 150
+                                ? item.Description.Substring(0, 150) + "..."
+                                : item.Description)
                         </p>
                         <div class="card-meta">
                             <span class="language-tag">@GetLanguageDisplay(item.Language)</span>
@@ -54,11 +54,11 @@
                         </div>
                     </div>
                     <div class="card-actions">
-                        <button class="btn-primary take-assessment" @onclick="() => StartAssessment(item.AssessmentId)">
+                        <button class="btn-primary take-assessment" @onclick="() => StartAssessment(item.AssessmentId, item.AssessmentLanguageId)">
                             <i class="icon-play"></i>
                             Take Assessment
                         </button>
-                        <button class="btn-secondary learn-more" @onclick="() => ViewAssessmentInfo(item.AssessmentId)">
+                        <button class="btn-secondary learn-more" @onclick="() => ViewAssessmentInfo(item.AssessmentLanguageId)">
                             <i class="icon-info"></i>
                             Learn More
                         </button>
@@ -67,7 +67,7 @@
             }
         </div>
 
-        @if (assessments.Count > DefaultAssessmentDisplayLimit && !showAllAssessments)
+        @if (displayAssessments.Count > DefaultAssessmentDisplayLimit && !showAllAssessments)
         {
             <div class="main-explore-button-container">
                 <button class="main-explore-button" @onclick="ToggleShowAllAssessments" disabled="@(!_isHydrated)">
@@ -84,7 +84,6 @@
         }
     }
 
-    <!-- Quick Info Section -->
     <div class="assessment-info-section">
         <h2>About These Assessments</h2>
         <div class="info-grid">
@@ -106,41 +105,82 @@
 
 <Footer />
 
-@code {  
-    private List<AssessmentDTO>? assessments;  
-    private bool hasError = false;  
-    private bool showAllAssessments = false;  
-    private const int DefaultAssessmentDisplayLimit = 6;  
-    private bool _isHydrated = false;  
+@code {
+    private class DisplayAssessment
+    {
+        public int AssessmentId { get; set; }
+        public int AssessmentLanguageId { get; set; }
+        public string AssessmentType { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Version { get; set; } = string.Empty;
+        public string Language { get; set; } = string.Empty;
+    }
 
-    protected override async Task OnInitializedAsync()  
-    {  
-        await LoadAssessmentsAsync();  
-    }  
+    private List<DisplayAssessment>? displayAssessments;
+    private bool hasError = false;
+    private bool showAllAssessments = false;
+    private const int DefaultAssessmentDisplayLimit = 6;
+    private bool _isHydrated = false;
+    private string? _loadErrorMessage;
 
-    private async Task LoadAssessmentsAsync()  
-    {  
-        try  
-        {  
-            assessments = await AssessmentApiService.GetAllAsync();  
-            Console.WriteLine($"Loaded {assessments?.Count} assessments.");  
-            hasError = false;  
-        }  
-        catch (Exception ex)  
-        {  
-            Console.WriteLine($"Error loading assessments: {ex.Message}");  
-            hasError = true;  
-        }  
-        finally  
-        {  
-            StateHasChanged();  
-        }
-    }  
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAndPrepareAssessmentsAsync();
+    }
 
-    private async Task RetryLoadAssessments()
+    private async Task LoadAndPrepareAssessmentsAsync()
     {
         hasError = false;
-        await LoadAssessmentsAsync();
+        _loadErrorMessage = null;
+        displayAssessments = null; // Show loading indicator
+        StateHasChanged();
+
+        try
+        {
+            // Fetch all active assessments
+            var rawAssessments = await AssessmentApiService.GetAssessmentsAsync();
+            var flattenedList = new List<DisplayAssessment>();
+
+            if (rawAssessments != null)
+            {
+                foreach (var assessment in rawAssessments.Where(a => a.IsActive))
+                {
+                    // Fetch versions for the assessment
+                    var versions = await AssessmentApiService.GetAssessmentVersionsAsync(assessment.Id);
+                    foreach (var version in versions.Where(v => v.IsActive))
+                    {
+                        // Fetch languages for the version
+                        var languages = await AssessmentApiService.GetLanguagesForVersionAsync(version.Id);
+                        foreach (var language in languages)
+                        {
+                            flattenedList.Add(new DisplayAssessment
+                            {
+                                AssessmentId = assessment.Id,
+                                AssessmentLanguageId = language.Id,
+                                AssessmentType = assessment.Type,
+                                Description = assessment.Description ?? GetDefaultDescription(assessment.Type),
+                                Version = version.Version,
+                                Language = language.LanguageCode
+                            });
+                        }
+                    }
+                }
+                displayAssessments = flattenedList;
+            }
+            else
+            {
+                displayAssessments = new List<DisplayAssessment>();
+            }
+        }
+        catch (Exception ex)
+        {
+            _loadErrorMessage = $"Error loading assessments: {ex.Message}";
+            hasError = true;
+        }
+        finally
+        {
+            StateHasChanged();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -148,33 +188,40 @@
         if (firstRender)
         {
             _isHydrated = true;
-            Console.WriteLine("[Hydration] isHydrated: true");
+            if (_loadErrorMessage != null)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", _loadErrorMessage);
+            }
+            else if (displayAssessments != null)
+            {
+                await JSRuntime.InvokeVoidAsync("console.log", $"Successfully loaded {displayAssessments.Count} assessment languages for display.");
+            }
             StateHasChanged();
-            await Task.CompletedTask;
         }
+    }
+
+    private async Task RetryLoadAssessments()
+    {
+        await LoadAndPrepareAssessmentsAsync();
     }
 
     private async Task ToggleShowAllAssessments()
     {
         showAllAssessments = !showAllAssessments;
-        Console.WriteLine($"ToggleShowAllAssessments called. showAllAssessments is now: {showAllAssessments}");
-
         if (!showAllAssessments)
         {
             await JSRuntime.InvokeVoidAsync("window.scrollTo", 0, 0);
         }
     }
 
-    private void StartAssessment(string assessmentId)
+    private void StartAssessment(int AssessmentId, int LanguageId)
     {
-        Console.WriteLine($"Starting assessment: AssessmentId={assessmentId}");
-        NavigationManager.NavigateTo($"/Assessment/Take/{assessmentId}", forceLoad: true);
+        NavigationManager.NavigateTo($"/Assessment/Take/{AssessmentId}/{LanguageId}", forceLoad: true);
     }
 
-    private void ViewAssessmentInfo(string assessmentId)
+    private void ViewAssessmentInfo(int AssessmentId)
     {
-        Console.WriteLine($"Viewing assessment info: AssessmentId={assessmentId}");
-        NavigationManager.NavigateTo($"/Assessment/Info/{assessmentId}", forceLoad: true);
+        NavigationManager.NavigateTo($"/Assessment/Info/{AssessmentId}", forceLoad: true);
     }
 
     private string GetDefaultDescription(string assessmentType)
@@ -187,13 +234,13 @@
         };
     }
 
-    private string GetLanguageDisplay(string language)
+    private string GetLanguageDisplay(string languageCode)
     {
-        return language switch
+        return languageCode switch
         {
             "eng" => "English",
             "vie" => "Tiếng Việt",
-            _ => language.ToUpper()
+            _ => languageCode.ToUpper()
         };
     }
 

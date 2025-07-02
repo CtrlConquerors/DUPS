@@ -1,557 +1,320 @@
-﻿@page "/Assessment/Take/{AssessmentId}"
-@using System.Security.Claims
+﻿@page "/Assessment/Take/{AssessmentId:int}/{LanguageId:int}"
 @using DUPSS.API.Models.DTOs
 @using DUPSS.Web.Components.Service
-@inject AssessmentApiService AssessmentApiService
-@inject AssessmentQuestionApiService AssessmentQuestionApiService
-@inject AssessmentAnswerApiService AssessmentAnswerApiService
-@inject NavigationManager NavigationManager
-@inject AuthenticationStateProvider AuthProvider
-@inject IJSRuntime JS
 
-<div class="take-assessment-container">
+@inject AssessmentApiService AssessmentService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Take Assessment</PageTitle>
+
+<div class="container-fluid py-4">
     @if (isLoading)
     {
-        <div class="loading-indicator">
-            <div class="loading-content">
-                <div class="spinner"></div>
-                <p>Loading assessment...</p>
+        <div class="d-flex justify-content-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
             </div>
         </div>
     }
-    else if (hasError)
+    else if (assessmentData == null)
     {
-        <div class="error-message">
-            <div class="error-icon">⚠️</div>
-            <h3>Unable to Load Assessment</h3>
-            <p>@errorMessage</p>
-            <div class="error-actions">
-                <button class="retry-button" @onclick="RetryLoadAssessment">
-                    <span class="button-icon">🔄</span>
-                    Retry
-                </button>
-                <button class="back-button" @onclick="GoBackToAssessments">
-                    <span class="button-icon">←</span>
-                    Back to Assessments
-                </button>
-            </div>
-        </div>
-    }
-    else if (assessment == null || !questions.Any())
-    {
-        <div class="no-content-message">
-            <div class="no-content-icon">📋</div>
-            <h3>Assessment Not Available</h3>
-            <p>This assessment is currently not available or has no questions.</p>
-            <button class="back-button" @onclick="GoBackToAssessments">
-                <span class="button-icon">←</span>
-                Back to Assessments
+        <div class="alert alert-danger">
+            <h4>Assessment Not Found</h4>
+            <p>@(_loadErrorMessage ?? "The requested assessment could not be found.")</p>
+            <button class="btn btn-primary" @onclick="NavigateToHome">
+                Return to Home
             </button>
-        </div>
-    }
-    else if (showResults && assessmentResult != null)
-    {
-        <div class="results-container">
-            <div class="results-header">
-                <div class="results-icon">✅</div>
-                <h2>Assessment Complete</h2>
-                <h3>@assessment.AssessmentType Results</h3>
-            </div>
-
-            <div class="results-content">
-                <div class="score-section">
-                    <div class="score-display">
-                        <span class="score-label">Total Score</span>
-                        <span class="score-value">@assessmentResult.TotalScore</span>
-                    </div>
-                </div>
-
-                <div class="recommendation-section">
-                    <h4>Recommendation</h4>
-                    <div class="recommendation-text">
-                        @assessmentResult.Recommendation
-                    </div>
-                </div>
-
-                @if (!string.IsNullOrEmpty(assessmentResult.ScoreDetails))
-                {
-                    <div class="details-section">
-                        <h4>Score Details</h4>
-                        <div class="score-details">
-                            @foreach (var (detail, index) in assessmentResult.ScoreDetails.Split(';').Select((value, i) => (value, i)))
-                            {
-                                <div class="detail-item">@ProcessAndReturnDetail(detail, index)</div>
-                            }
-                        </div>
-                    </div>
-                }
-
-                <div class="completion-info">
-                    <p><strong>Completed on:</strong> @assessmentResult.CompletedOn?.ToString("MMMM dd, yyyy")</p>
-                </div>
-            </div>
-
-            <div class="results-actions">
-                <button class="primary-button" @onclick="TakeAnotherAssessment">
-                    <span class="button-icon">📋</span>
-                    Take Another Assessment
-                </button>
-                <button class="secondary-button" @onclick="GoBackToAssessments">
-                    <span class="button-icon">←</span>
-                    Back to Assessments
-                </button>
-            </div>
         </div>
     }
     else
     {
-        <div class="assessment-header">
-            <div class="assessment-info">
-                <h1>@assessment.AssessmentType</h1>
-                <p class="assessment-description">@assessment.Description</p>
-            </div>
-
-            <div class="progress-container">
-                <div class="progress-info">
-                    <span class="progress-text">Question @(currentQuestionIndex + 1) of @GetEffectiveQuestionCount()</span>
-                    <span class="progress-percentage">@Math.Round(((double)(currentQuestionIndex + 1) / GetEffectiveQuestionCount()) * 100, 0)%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: @(((double)(currentQuestionIndex + 1) / GetEffectiveQuestionCount()) * 100)%"></div>
-                </div>
-            </div>
-        </div>
-
-        <div class="question-container">
-            <div class="question-card">
-                <div class="question-header">
-                    <h3>Question @(currentQuestionIndex + 1)</h3>
-                </div>
-
-                <div class="question-text">
-                    @currentQuestion.Question
-                </div>
-
-                <div class="answers-container">
-                    @switch (currentQuestion.QuestionType)
-                    {
-                        case "MultipleChoice":
-                            @foreach (var answer in currentAnswers)
-                            {
-                                <div class="answer-option">
-                                    <div class="answer-checkbox">
-                                        <input type="checkbox"
-                                               name="answer-@currentQuestion.QuestionId"
-                                               value="@answer.AnswerId"
-                                               checked="@(selectedAnswerIds.Contains(answer.AnswerId))"
-                                               @onchange="() => ToggleAnswer(answer.AnswerId)"/>
-                                        <span
-                                            class="checkbox-checkmark @(selectedAnswerIds.Contains(answer.AnswerId) ? "selected" : "")"></span>
-                                    </div>
-                                    <div class="answer-content">
-                                        <div class="answer-text">@answer.Answer</div>
-                                        @if (!string.IsNullOrEmpty(answer.AnswerDetails))
-                                        {
-                                            <div class="answer-details">@answer.AnswerDetails</div>
-                                        }
-                                    </div>
-                                </div>
-                            }
-                            break;
-                        case "YesNo":
-                            @foreach (var answer in currentAnswers)
-                            {
-                                <div class="answer-option">
-                                    <div class="answer-radio">
-                                        <input type="radio"
-                                               name="answer-@currentQuestion.QuestionId"
-                                               value="@answer.AnswerId"
-                                               checked="@(selectedAnswerIds.Contains(answer.AnswerId))"
-                                               @onchange="() => SelectSingleAnswer(answer.AnswerId)"/>
-                                        <span
-                                            class="radio-checkmark @(selectedAnswerIds.Contains(answer.AnswerId) ? "selected" : "")"></span>
-                                    </div>
-                                    <div class="answer-content">
-                                        <div class="answer-text">@answer.Answer</div>
-                                        @if (!string.IsNullOrEmpty(answer.AnswerDetails))
-                                        {
-                                            <div class="answer-details">@answer.AnswerDetails</div>
-                                        }
-                                    </div>
-                                </div>
-                            }
-                            break;
-                        case "Scale":
-                            <div class="answer-option">
-                                <div class="answer-scale">
-                                    <input type="number"
-                                           name="answer-@currentQuestion.QuestionId"
-                                           min="1"
-                                           max="10"
-                                           value="@(answers.ContainsKey(currentQuestion.QuestionId + "_text") ? answers[currentQuestion.QuestionId + "_text"] : string.Empty)"
-                                           @oninput="e => SaveAnswerOnInput(currentQuestion.QuestionId, e)" />
-                                    <span class="scale-label"> (1 = Lowest, 10 = Highest)</span>
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card shadow">
+                    <div class="card-header bg-primary text-white">
+                        <h3 class="card-title mb-0">
+                            @assessmentData.Name
+                            <span class="badge bg-light text-dark ms-2">@assessmentData.LanguageName</span>
+                        </h3>
+                        @if (!string.IsNullOrEmpty(assessmentData.Description))
+                        {
+                            <p class="card-text mt-2 mb-0">@assessmentData.Description</p>
+                        }
+                    </div>
+                    <div class="card-body">
+                        @if (!isSubmitted)
+                        {
+                            <div class="progress mb-4">
+                                <div class="progress-bar" role="progressbar" 
+                                     style="width: @(progressPercentage)%" 
+                                     aria-valuenow="@progressPercentage" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    Question @(currentQuestionIndex + 1) of @assessmentData.Questions.Count
                                 </div>
                             </div>
-                            break;
-                        case "Text":
-                            <div class="answer-option">
-                                <div class="answer-textarea">
-                                    <input type="number"
-                                           name="answer-@currentQuestion.QuestionId"
-                                           min="0"
-                                           value="@(answers.ContainsKey(currentQuestion.QuestionId + "_text") ? answers[currentQuestion.QuestionId + "_text"] : string.Empty)"
-                                           @oninput="e => SaveAnswerOnInput(currentQuestion.QuestionId, e)"
-                                           placeholder="Enter a number (0 for none)" />
+
+                            @if (currentQuestionIndex < assessmentData.Questions.Count)
+                            {
+                                var question = assessmentData.Questions[currentQuestionIndex];
+                                <div class="question-container">
+                                    <h4 class="question-text mb-3">
+                                        @((currentQuestionIndex + 1)). @question.Text
+                                        @if (question.IsRequired)
+                                        {
+                                            <span class="text-danger">*</span>
+                                        }
+                                    </h4>
+
+                                    @if (question.Type == "YesNo" || question.Type == "MultipleChoice")
+                                    {
+                                        <div class="d-grid gap-2">
+                                            @foreach (var option in question.Options.OrderBy(o => o.OrderIndex))
+                                            {
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" 
+                                                           name="question_@question.Id" 
+                                                           id="option_@option.Id"
+                                                           checked="@IsOptionSelected(question.Id, option.Id)"
+                                                           @onchange="() => SelectOption(question.Id, option.Id, option.Value)">
+                                                    <label class="form-check-label" for="option_@option.Id">
+                                                        @option.Text
+                                                    </label>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else if (question.Type == "Scale")
+                                    {
+                                        <div class="row">
+                                            @foreach (var option in question.Options.OrderBy(o => o.OrderIndex))
+                                            {
+                                                <div class="col">
+                                                    <div class="text-center">
+                                                        <button type="button" 
+                                                                class="btn @(GetSelectedOptionClass(question.Id, option.Id)) btn-circle mb-2"
+                                                                @onclick="() => SelectOption(question.Id, option.Id, option.Value)">
+                                                            @option.Value
+                                                        </button>
+                                                        <div class="small">@option.Text</div>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else if (question.Type == "Text")
+                                    {
+                                        <textarea class="form-control" rows="3" 
+                                                  @bind="textResponses[question.Id]" 
+                                                  @bind:event="oninput"
+                                                  placeholder="Enter your response here..."></textarea>
+                                    }
+
+                                    @if (validationErrors.ContainsKey(question.Id))
+                                    {
+                                        <div class="text-danger mt-2">
+                                            @validationErrors[question.Id]
+                                        </div>
+                                    }
                                 </div>
+
+                                <div class="d-flex justify-content-between mt-4">
+                                    <button class="btn btn-outline-secondary" 
+                                            @onclick="PreviousQuestion" 
+                                            disabled="@(currentQuestionIndex == 0)">
+                                        <i class="fas fa-chevron-left"></i> Previous
+                                    </button>
+                                    
+                                    @if (currentQuestionIndex == assessmentData.Questions.Count - 1)
+                                    {
+                                        <button class="btn btn-success" @onclick="SubmitAssessment" disabled="@isSubmitting">
+                                            @if (isSubmitting)
+                                            {
+                                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                            }
+                                            Submit Assessment
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-primary" @onclick="NextQuestion">
+                                            Next <i class="fas fa-chevron-right"></i>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                            else if (assessmentData.Questions.Count == 0)
+                            {
+                                <div class="alert alert-warning">
+                                    <p>No questions available for this assessment.</p>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-center">
+                                <div class="alert alert-success">
+                                    <h4><i class="fas fa-check-circle"></i> Assessment Completed!</h4>
+                                    <p>Thank you for completing the assessment.</p>
+                                    @if (assessmentResult != null)
+                                    {
+                                        <div class="mt-3">
+                                            <h5>Results:</h5>
+                                            <p><strong>Total Score:</strong> @assessmentResult.TotalScore</p>
+                                            @if (!string.IsNullOrEmpty(assessmentResult.RiskLevel))
+                                            {
+                                                <p><strong>Risk Level:</strong> 
+                                                    <span class="badge @GetRiskLevelClass(assessmentResult.RiskLevel)">
+                                                        @assessmentResult.RiskLevel
+                                                    </span>
+                                                </p>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                                <button class="btn btn-primary" @onclick="NavigateToHome">
+                                    Return to Home
+                                </button>
                             </div>
-                            break;
-                    }
-                </div>
-
-                <div class="question-actions">
-                    <button class="secondary-button"
-                            @onclick="PreviousQuestion"
-                            disabled="@(currentQuestionIndex == 0)">
-                        <span class="button-icon">←</span>
-                        Previous
-                    </button>
-
-                    @if (currentQuestionIndex < GetEffectiveQuestionCount() - 1)
-                    {
-                        <button class="primary-button"
-                                @onclick="NextQuestion"
-                                disabled="@(!IsAnswerSelected())">
-                            Next
-                            <span class="button-icon">→</span>
-                        </button>
-                    }
-                    else
-                    {
-                        <button class="submit-button"
-                                @onclick="SubmitAssessment"
-                                disabled="@(!IsAnswerSelected() || isSubmitting)">
-                            @if (isSubmitting)
-                            {
-                                <span class="button-spinner"></span>
-                                <span>Submitting...</span>
-                            }
-                            else
-                            {
-                                <span class="button-icon">✓</span>
-                                <span>Submit Assessment</span>
-                            }
-                        </button>
-                    }
+                        }
+                    </div>
                 </div>
             </div>
-        </div>
-
-        <div class="assessment-footer">
-            <button class="exit-button" @onclick="ConfirmExit">
-                <span class="button-icon">×</span>
-                Exit Assessment
-            </button>
         </div>
     }
 </div>
 
-@if (showExitConfirmation)
-{
-    <div class="modal-overlay" @onclick="CancelExit">
-        <div class="modal-content" @onclick:stopPropagation="true">
-            <div class="modal-header">
-                <h3>Exit Assessment?</h3>
-            </div>
-            <div class="modal-body">
-                <p>Are you sure you want to exit this assessment? Your progress will be lost.</p>
-            </div>
-            <div class="modal-actions">
-                <button class="secondary-button" @onclick="CancelExit">Cancel</button>
-                <button class="danger-button" @onclick="ExitAssessment">Exit</button>
-            </div>
-        </div>
-    </div>
-}
+<style>
+    .btn-circle {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        font-weight: bold;
+    }
+    
+    .question-container {
+        min-height: 300px;
+    }
+    
+    .question-text {
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    .form-check-label {
+        font-weight: 500;
+        cursor: pointer;
+    }
+    
+    .progress {
+        height: 8px;
+    }
+</style>
 
 @code {
-    [Parameter]
-    public string AssessmentId { get; set; } = string.Empty;
-
-    private AssessmentDTO? assessment;
-    private List<AssessmentQuestionDTO> questions = new();
-    private Dictionary<string, List<AssessmentAnswerDTO>> questionAnswers = new();
-    private Dictionary<string, List<string>> userAnswers = new(); // QuestionId -> List<AnswerId> for MultipleChoice/YesNo, or text/scale value
-    private AssessmentResultDTO? assessmentResult;
-
+    [Parameter] public int LanguageId { get; set; }
+    [Parameter] public int AssessmentId { get; set; }
+    
+    private AssessmentForTakingDTO? assessmentData;
     private bool isLoading = true;
-    private bool hasError = false;
     private bool isSubmitting = false;
-    private bool showResults = false;
-    private bool showExitConfirmation = false;
-    private string errorMessage = string.Empty;
+    private bool isSubmitted = false;
     private int currentQuestionIndex = 0;
-    private List<string> selectedAnswerIds = new();
-    private string? CurrentMemberId;
+    private AssessmentResponseDTO? assessmentResult;
+    private string? _submitErrorMessage;
+    
+    private Dictionary<int, int> selectedOptions = new();
+    private Dictionary<int, string> textResponses = new();
+    private Dictionary<int, string> validationErrors = new();
+    
+    private double progressPercentage => assessmentData?.Questions.Count > 0 
+        ? (double)(currentQuestionIndex + 1) / assessmentData.Questions.Count * 100 
+        : 0;
 
-    private AssessmentQuestionDTO currentQuestion => questions[currentQuestionIndex];
-    private List<AssessmentAnswerDTO> currentAnswers => questionAnswers.GetValueOrDefault(currentQuestion.QuestionId, new List<AssessmentAnswerDTO>());
-
-    private Dictionary<string, string> answers = new();
-    private bool stopAtFourthQuestion = false;
-    private int earlyTextScore = 0;
-
-    // New property to track if early termination logic has been triggered
-    private bool earlyTerminationTriggered = false;
-
-    private async Task SaveAnswerOnInput(string questionId, ChangeEventArgs e)
+    private class OptionDTO
     {
-        if (e?.Value != null)
-        {
-            string input = e.Value.ToString();
-            if (currentQuestion.QuestionType == "Text")
-            {
-                if (!string.IsNullOrEmpty(input.Trim()))
-                {
-                    answers[questionId] = input; // Store input temporarily (will be replaced with AnswerId during submission)
-                    userAnswers[questionId] = new List<string> { input }; // Store input temporarily in userAnswers
-                    answers[questionId + "_text"] = input; // Store text input for display and early termination
-                }
-                else
-                {
-                    answers[questionId] = string.Empty;
-                    userAnswers[questionId] = new List<string>();
-                    answers[questionId + "_text"] = string.Empty;
-                }
-                // Re-evaluate early termination logic after any text answer change
-                CheckEarlyTerminationLogic();
-            }
-            else if (currentQuestion.QuestionType == "Scale")
-            {
-                if (int.TryParse(input, out int value) && value >= 1 && value <= 10)
-                {
-                    var answerDto = new AssessmentAnswerDTO
-                    {
-                        AnswerId = string.Empty,
-                        QuestionId = questionId,
-                        Answer = input,
-                        AnswerDetails = null,
-                        ScoreValue = value,
-                        ScoreDescription = null
-                    };
-                    var createdAnswer = await AssessmentAnswerApiService.CreateAnswerAsync(answerDto);
-                    if (createdAnswer != null)
-                    {
-                        answers[questionId] = createdAnswer.AnswerId; // Store AnswerId for submission
-                        userAnswers[questionId] = new List<string> { createdAnswer.AnswerId }; // Store AnswerId for submission
-                        answers[questionId + "_text"] = input; // Store input for display
-                    }
-                    else
-                    {
-                        answers[questionId] = string.Empty;
-                        userAnswers[questionId] = new List<string>();
-                        answers[questionId + "_text"] = string.Empty;
-                        await JS.InvokeVoidAsync("alert", "Failed to save scale answer.");
-                    }
-                }
-                else
-                {
-                    answers[questionId] = string.Empty;
-                    userAnswers[questionId] = new List<string>();
-                    answers[questionId + "_text"] = string.Empty;
-                    if (!string.IsNullOrEmpty(input.Trim()))
-                    {
-                        await JS.InvokeVoidAsync("alert", "Please enter a number between 1 and 10.");
-                    }
-                }
-            }
-            else
-            {
-                answers[questionId] = input;
-            }
-        }
-        else
-        {
-            answers[questionId] = string.Empty;
-            userAnswers[questionId] = new List<string>();
-            answers[questionId + "_text"] = string.Empty;
-            // Re-evaluate early termination logic if answer is cleared
-            if (currentQuestion.QuestionType == "Text")
-            {
-                CheckEarlyTerminationLogic();
-            }
-        }
-
-        await SaveAnswersToLocalStorage();
-        StateHasChanged();
+        public int Id { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public int Value { get; set; }
+        public int OrderIndex { get; set; }
     }
 
-    private void NextQuestion()
+    private class AssessmentForTakingDTO
     {
-        if (currentQuestionIndex < GetEffectiveQuestionCount() - 1 && IsAnswerSelected())
-        {
-            SaveCurrentAnswer();
-            CheckEarlyTerminationLogic();
-            currentQuestionIndex++;
-            LoadCurrentQuestionAnswers();
-            StateHasChanged();
-        }
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public string Version { get; set; } = string.Empty;
+        public string LanguageCode { get; set; } = string.Empty;
+        public string LanguageName { get; set; } = string.Empty;
+        public List<QuestionDTO> Questions { get; set; } = new();
     }
 
-    private void PreviousQuestion()
+    private class QuestionDTO
     {
-        if (currentQuestionIndex > 0)
-        {
-            SaveCurrentAnswer();
-            currentQuestionIndex--;
-            LoadCurrentQuestionAnswers();
-            CheckEarlyTerminationLogic(); // Re-evaluate early termination when going back
-            StateHasChanged();
-        }
-    }
-
-    private void CheckEarlyTerminationLogic()
-    {
-        if (questions.Count >= 4)
-        {
-            // Check if all of the first three questions are Text type and answered with 0
-            bool allTextAndZero = questions.Take(3).All(q =>
-                q.QuestionType == "Text" &&
-                answers.TryGetValue(q.QuestionId + "_text", out var val) &&
-                val == "0");
-
-            // Calculate earlyTextScore: 1 point for each non-zero Text answer
-            earlyTextScore = 0;
-            foreach (var q in questions.Take(3))
-            {
-                if (q.QuestionType == "Text" &&
-                    answers.TryGetValue(q.QuestionId + "_text", out var val) &&
-                    val != "0")
-                {
-                    earlyTextScore += 1;
-                }
-            }
-
-            // Update early termination flags
-            if (allTextAndZero && currentQuestionIndex >= 2) // Only stop at fourth question if all are 0
-            {
-                stopAtFourthQuestion = true;
-                earlyTerminationTriggered = true;
-            }
-            else
-            {
-                // Reset early termination if any answer is non-zero
-                stopAtFourthQuestion = false;
-                earlyTerminationTriggered = false;
-            }
-        }
-        else
-        {
-            stopAtFourthQuestion = false;
-            earlyTerminationTriggered = false;
-        }
-    }
-
-    private int GetEffectiveQuestionCount()
-    {
-        if (stopAtFourthQuestion && earlyTerminationTriggered)
-        {
-            return Math.Min(4, questions.Count); // Show only first 4 questions if early termination is active
-        }
-        return questions.Count; // Show all questions otherwise
-    }
-
-    private async Task SaveAnswersToLocalStorage()
-    {
-        var storageData = new Dictionary<string, List<string>>();
-        foreach (var kvp in userAnswers)
-        {
-            storageData[kvp.Key] = kvp.Value;
-        }
-        foreach (var kvp in answers)
-        {
-            storageData[kvp.Key] = new List<string> { kvp.Value };
-        }
-        await JS.InvokeVoidAsync("localStorage.setItem", $"assessment_{AssessmentId}_answers", System.Text.Json.JsonSerializer.Serialize(storageData));
+        public int Id { get; set; }
+        public int LanguageId { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public bool IsRequired { get; set; }
+        public int OrderIndex { get; set; }
+        public List<OptionDTO> Options { get; set; } = new();
     }
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAssessmentAsync();
-    }
-
-    private async Task LoadAssessmentAsync()
-    {
-        isLoading = true;
-        hasError = false;
-        errorMessage = string.Empty;
-
         try
         {
-            Console.WriteLine($"Loading assessment with ID: {AssessmentId}");
-
-            // Load assessment details
-            assessment = await AssessmentApiService.GetByIdAsync(AssessmentId);
-            if (assessment == null)
+            var language = await AssessmentService.GetAssessmentForTakingAsync(LanguageId);
+            if (language != null)
             {
-                hasError = true;
-                errorMessage = "Assessment not found.";
-                return;
-            }
-
-            // Load all questions for this assessment
-            var allQuestions = await AssessmentQuestionApiService.GetAllAsync();
-            questions = allQuestions.Where(q => q.AssessmentId == AssessmentId).ToList();
-
-            if (!questions.Any())
-            {
-                hasError = true;
-                errorMessage = "No questions found for this assessment.";
-                return;
-            }
-
-            // Load all answers and group by question
-            var allAnswers = await AssessmentAnswerApiService.GetAllAsync();
-            questionAnswers = allAnswers
-                .Where(a => questions.Any(q => q.QuestionId == a.QuestionId))
-                .GroupBy(a => a.QuestionId)
-                .ToDictionary(g => g.Key, g => g.ToList());
-
-            // Validate that all questions have answers for MultipleChoice and YesNo
-            var questionsWithoutAnswers = questions
-                .Where(q => (q.QuestionType == "MultipleChoice" || q.QuestionType == "YesNo") &&
-                    (!questionAnswers.ContainsKey(q.QuestionId) || !questionAnswers[q.QuestionId].Any()))
-                .ToList();
-            if (questionsWithoutAnswers.Any())
-            {
-                hasError = true;
-                errorMessage = $"Some questions are missing answer options: {string.Join(", ", questionsWithoutAnswers.Select(q => q.QuestionId))}";
-                return;
-            }
-
-            // Initialize user answers dictionary
-            foreach (var question in questions)
-            {
-                if (!userAnswers.ContainsKey(question.QuestionId))
+                // Fetch assessment details to get Name, Description, Type
+                var assessment = await AssessmentService.GetAssessmentAsync(AssessmentId);
+                assessmentData = new AssessmentForTakingDTO
                 {
-                    userAnswers[question.QuestionId] = new List<string>();
+                    Id = language.Id,
+                    Name = language.Name,
+                    Description = language.Description,
+                    Type = language.Type,
+                    Version = language.Version,
+                    LanguageCode = language.LanguageCode,
+                    LanguageName = language.LanguageName,
+                    Questions = language.Questions.Select(q => new QuestionDTO
+                    {
+                        Id = q.Id,
+                        LanguageId = language.Id,
+                        Text = q.Text,
+                        Type = q.Type,
+                        IsRequired = q.IsRequired,
+                        OrderIndex = q.OrderIndex,
+                        Options = q.Options.Select(o => new OptionDTO
+                        {
+                            Id = o.Id,
+                            Text = o.Text,
+                            Value = o.Value,
+                            OrderIndex = o.OrderIndex
+                        }).ToList()
+                    }).OrderBy(q => q.OrderIndex).ToList()
+                };
+            }
+
+            // Initialize text responses dictionary
+            if (assessmentData?.Questions != null)
+            {
+                foreach (var question in assessmentData.Questions)
+                {
+                    if (question.Type == "Text")
+                    {
+                        textResponses[question.Id] = string.Empty;
+                    }
                 }
             }
-
-            // Try to load saved answers from localStorage
-            await LoadAnswersFromLocalStorage();
-
-            // Initialize selected answers for current question
-            LoadCurrentQuestionAnswers();
-            CheckEarlyTerminationLogic(); // Initial check after loading answers
-
-            Console.WriteLine($"Successfully loaded assessment with {questions.Count} questions");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading assessment: {ex.Message}");
-            hasError = true;
-            errorMessage = $"Failed to load assessment: {ex.Message}";
+            _loadErrorMessage = $"Error loading assessment: {ex.Message}";
         }
         finally
         {
@@ -560,217 +323,136 @@
         }
     }
 
-    private async Task LoadAnswersFromLocalStorage()
+    private string? _loadErrorMessage;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        try
+        if (firstRender && _loadErrorMessage != null)
         {
-            var storedData = await JS.InvokeAsync<string>("localStorage.getItem", $"assessment_{AssessmentId}_answers");
-            if (!string.IsNullOrEmpty(storedData))
-            {
-                var storageData = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<string>>>(storedData);
-                if (storageData != null)
-                {
-                    foreach (var kvp in storageData)
-                    {
-                        if (kvp.Key.EndsWith("_text"))
-                        {
-                            answers[kvp.Key] = kvp.Value.FirstOrDefault() ?? string.Empty;
-                        }
-                        else if (userAnswers.ContainsKey(kvp.Key))
-                        {
-                            userAnswers[kvp.Key] = kvp.Value ?? new List<string>();
-                        }
-                    }
-                }
-            }
+            await JSRuntime.InvokeVoidAsync("console.error", _loadErrorMessage);
         }
-        catch (Exception ex)
+        if (_submitErrorMessage != null)
         {
-            Console.WriteLine($"Error loading answers from localStorage: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", _submitErrorMessage);
+            _submitErrorMessage = null; // Clear after displaying
         }
     }
 
-    private void LoadCurrentQuestionAnswers()
+    private void SelectOption(int questionId, int optionId, int value)
     {
-        selectedAnswerIds = userAnswers.ContainsKey(currentQuestion.QuestionId)
-            ? new List<string>(userAnswers[currentQuestion.QuestionId])
-            : new List<string>();
-        
-        // For display purposes, set the main answer field
-        if (selectedAnswerIds.Any())
-        {
-            answers[currentQuestion.QuestionId] = selectedAnswerIds.FirstOrDefault();
-        }
-    }
-
-    private void ToggleAnswer(string answerId)
-    {
-        if (selectedAnswerIds.Contains(answerId))
-        {
-            selectedAnswerIds.Remove(answerId);
-        }
-        else
-        {
-            selectedAnswerIds.Add(answerId);
-        }
-        userAnswers[currentQuestion.QuestionId] = new List<string>(selectedAnswerIds);
+        selectedOptions[questionId] = optionId;
+        validationErrors.Remove(questionId);
         StateHasChanged();
     }
 
-    private void SelectSingleAnswer(string answerId)
+    private bool IsOptionSelected(int questionId, int optionId)
     {
-        selectedAnswerIds = new List<string> { answerId };
-        userAnswers[currentQuestion.QuestionId] = new List<string> { answerId };
-        StateHasChanged();
+        return selectedOptions.ContainsKey(questionId) && selectedOptions[questionId] == optionId;
     }
 
-    private bool IsAnswerSelected()
+    private string GetSelectedOptionClass(int questionId, int optionId)
     {
-        return currentQuestion.QuestionType switch
-        {
-            "MultipleChoice" => selectedAnswerIds.Any(),
-            "YesNo" => selectedAnswerIds.Any(),
-            "Scale" => userAnswers[currentQuestion.QuestionId].Any() &&
-                       answers.ContainsKey(currentQuestion.QuestionId + "_text") &&
-                       int.TryParse(answers[currentQuestion.QuestionId + "_text"], out int value) &&
-                       value >= 1 && value <= 10,
-            "Text" => userAnswers[currentQuestion.QuestionId].Any() &&
-                      answers.ContainsKey(currentQuestion.QuestionId + "_text") &&
-                      !string.IsNullOrEmpty(answers[currentQuestion.QuestionId + "_text"]),
-            _ => false
-        };
+        return IsOptionSelected(questionId, optionId) ? "btn-primary" : "btn-outline-primary";
     }
 
-    private void SaveCurrentAnswer()
+    private void NextQuestion()
     {
-        if (currentQuestion.QuestionType == "Scale")
+        if (ValidateCurrentQuestion())
         {
-            userAnswers[currentQuestion.QuestionId] = new List<string> { answers[currentQuestion.QuestionId] ?? "" };
-        }
-        else if (currentQuestion.QuestionType == "Text")
-        {
-            userAnswers[currentQuestion.QuestionId] = new List<string> { answers[currentQuestion.QuestionId + "_text"] ?? "" }; // Store text input
-        }
-        else
-        {
-            userAnswers[currentQuestion.QuestionId] = new List<string>(selectedAnswerIds);
+            currentQuestionIndex++;
         }
     }
 
-    private async Task RetryLoadAssessment()
+    private void PreviousQuestion()
     {
-        await LoadAssessmentAsync();
-    }
-    
-    private string ProcessAndReturnDetail(string detail, int index)
-    {
-        var trimmedDetail = detail.Trim();
-        
-        if (!string.IsNullOrEmpty(trimmedDetail) && trimmedDetail.Contains(':'))
+        if (currentQuestionIndex > 0)
         {
-            return "Question " + (index + 1) + ": " + trimmedDetail.Substring(trimmedDetail.IndexOf(':') + 1);
-        }
-        else
-        {
-            return "Question " + (index + 1) + ": " + trimmedDetail;
+            currentQuestionIndex--;
+            validationErrors.Clear();
         }
     }
-    
-    private async Task SubmitAssessment()
+
+    private bool ValidateCurrentQuestion()
     {
-        if (!IsAnswerSelected() || isSubmitting)
-            return;
+        if (assessmentData?.Questions == null || currentQuestionIndex >= assessmentData.Questions.Count)
+            return false;
 
-        SaveCurrentAnswer();
-        isSubmitting = true;
-        StateHasChanged();
+        var question = assessmentData.Questions[currentQuestionIndex];
+        validationErrors.Remove(question.Id);
 
-        try
+        if (question.IsRequired)
         {
-            if (string.IsNullOrEmpty(CurrentMemberId))
+            if (question.Type == "Text")
             {
-                var authState = await AuthProvider.GetAuthenticationStateAsync();
-                var user = authState.User;
-
-                if (user.Identity?.IsAuthenticated == true)
+                if (!textResponses.ContainsKey(question.Id) || string.IsNullOrWhiteSpace(textResponses[question.Id]))
                 {
-                    CurrentMemberId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                        ?? user.FindFirst("sub")?.Value
-                        ?? user.FindFirst("MemberId")?.Value;
+                    validationErrors[question.Id] = "This question is required.";
+                    return false;
                 }
-
-                if (string.IsNullOrEmpty(CurrentMemberId))
-                {
-                    await JS.InvokeVoidAsync("alert", "Failed to retrieve Member ID. Please login again.");
-                    NavigationManager.NavigateTo("/login");
-                    return;
-                }
-            }
-
-            // Prepare submission data
-            var submission = new AssessmentSubmissionDTO
-            {
-                MemberId = CurrentMemberId,
-                Answers = new List<AnswerSubmissionDTO>(),
-                TextAnswers = new List<TextAnswerSubmissionDTO>(),
-                EarlyTextScore = earlyTextScore
-            };
-
-            // Process answers - only include answers for questions that were actually presented
-            var questionsToSubmit = stopAtFourthQuestion && earlyTerminationTriggered 
-                ? questions.Take(4).ToList() 
-                : questions;
-
-            foreach (var question in questionsToSubmit)
-            {
-                if (userAnswers.ContainsKey(question.QuestionId) && userAnswers[question.QuestionId].Any())
-                {
-                    if (question.QuestionType == "Text" && !string.IsNullOrEmpty(userAnswers[question.QuestionId][0]))
-                    {
-                        // Add Text answer directly to TextAnswers
-                        submission.TextAnswers.Add(new TextAnswerSubmissionDTO
-                        {
-                            QuestionId = question.QuestionId,
-                            Answer = userAnswers[question.QuestionId][0]
-                        });
-                    }
-                    else
-                    {
-                        // For non-Text questions (Scale, MultipleChoice, YesNo)
-                        foreach (var answerId in userAnswers[question.QuestionId])
-                        {
-                            if (!string.IsNullOrEmpty(answerId))
-                            {
-                                submission.Answers.Add(new AnswerSubmissionDTO { AnswerId = answerId });
-                            }
-                        }
-                    }
-                }
-            }
-
-            Console.WriteLine($"Submitting assessment with {submission.Answers.Count} answers, {submission.TextAnswers.Count} text answers, EarlyTextScore: {submission.EarlyTextScore}");
-
-            // Submit assessment
-            assessmentResult = await AssessmentApiService.SubmitAssessmentAsync(AssessmentId, submission);
-
-            if (assessmentResult != null)
-            {
-                showResults = true;
-                Console.WriteLine($"Assessment submitted successfully. Score: {assessmentResult.TotalScore}");
-                // Clear localStorage after successful submission
-                await JS.InvokeVoidAsync("localStorage.removeItem", $"assessment_{AssessmentId}_answers");
             }
             else
             {
-                hasError = true;
-                errorMessage = "Failed to submit assessment. Please try again.";
+                if (!selectedOptions.ContainsKey(question.Id))
+                {
+                    validationErrors[question.Id] = "Please select an answer.";
+                    return false;
+                }
             }
+        }
+
+        return true;
+    }
+
+    private async Task SubmitAssessment()
+    {
+        if (!ValidateCurrentQuestion())
+            return;
+
+        isSubmitting = true;
+        try
+        {
+            var responses = new List<QuestionResponseDTO>();
+            
+            foreach (var question in assessmentData!.Questions)
+            {
+                var response = new QuestionResponseDTO { QuestionId = question.Id };
+                
+                if (question.Type == "Text")
+                {
+                    if (textResponses.ContainsKey(question.Id) && !string.IsNullOrWhiteSpace(textResponses[question.Id]))
+                    {
+                        response.TextResponse = textResponses[question.Id];
+                    }
+                }
+                else if (selectedOptions.ContainsKey(question.Id))
+                {
+                    response.SelectedOptionId = selectedOptions[question.Id];
+                    var selectedOption = question.Options.FirstOrDefault(o => o.Id == selectedOptions[question.Id]);
+                    if (selectedOption != null)
+                    {
+                        response.NumericResponse = selectedOption.Value;
+                    }
+                }
+                
+                responses.Add(response);
+            }
+
+            var submitDTO = new AssessmentResponseDTO
+            {
+                LanguageId = LanguageId,
+                RespondentId = Guid.NewGuid().ToString(),
+                StartedAt = DateTime.UtcNow,
+                CompletedAt = DateTime.UtcNow,
+                IsCompleted = true,
+                Responses = responses
+            };
+
+            assessmentResult = await AssessmentService.SubmitResponseAsync(submitDTO);
+            isSubmitted = true;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error submitting assessment: {ex.Message}");
-            hasError = true;
-            errorMessage = $"Failed to submit assessment: {ex.Message}";
+            _submitErrorMessage = $"Error submitting assessment: {ex.Message}";
         }
         finally
         {
@@ -779,30 +461,19 @@
         }
     }
 
-    private void ConfirmExit()
+    private string GetRiskLevelClass(string riskLevel)
     {
-        showExitConfirmation = true;
-        StateHasChanged();
+        return riskLevel.ToLower() switch
+        {
+            "low" => "bg-success",
+            "medium" => "bg-warning",
+            "high" => "bg-danger",
+            _ => "bg-secondary"
+        };
     }
-
-    private void CancelExit()
+    
+    private void NavigateToHome()
     {
-        showExitConfirmation = false;
-        StateHasChanged();
-    }
-
-    private void ExitAssessment()
-    {
-        NavigationManager.NavigateTo("/Assessment", forceLoad: true);
-    }
-
-    private void GoBackToAssessments()
-    {
-        NavigationManager.NavigateTo("/Assessment", forceLoad: true);
-    }
-
-    private void TakeAnotherAssessment()
-    {
-        NavigationManager.NavigateTo("/Assessment", forceLoad: true);
+        Navigation.NavigateTo("/", forceLoad: true);
     }
 }
